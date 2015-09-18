@@ -28,15 +28,16 @@
 #include <RBL_nRF8001.h>
 //#include "Boards.h"
 #include "Adafruit_MAX31855.h"
+#include "FiniteStateMachine.h"
 
 //------------------------------------------
 // Constants
 //------------------------------------------
 
-  static const uint8_t zoneUpperFront = 1;
-  static const uint8_t zoneUpperRear  = 2;
-  static const uint8_t zoneLowerFront = 3;
-  static const uint8_t zoneLowerRear  = 4;
+static const uint8_t zoneUpperFront = 1;
+static const uint8_t zoneUpperRear  = 2;
+static const uint8_t zoneLowerFront = 3;
+static const uint8_t zoneLowerRear  = 4;
 
 //------------------------------------------
 // Pin Definitions
@@ -44,6 +45,7 @@
 
 #define COOLING_FAN_SIGNAL 				(0)
 
+// TBD HW Pin Defs Out of Order and need to be checked.
 // Thermocouple Pin Definitions
 #define SW_SPI_THERMO_DO                (2)
 #define SW_SPI_THERMO_CLK               (5)
@@ -51,6 +53,12 @@
 #define SW_SPI_THERMO_CS_UPPER_REAR		(8)
 #define SW_SPI_THERMO_CS_LOWER_FRONT	(5)
 #define SW_SPI_THERMO_CS_LOWER_REAR		(3)
+
+// Heater Enable Pin Definitions
+#define HEATER_ENABLE_UPPER_FRONT		(9)
+#define HEATER_ENABLE_UPPER_REAR		(10)
+#define HEATER_ENABLE_LOWER_FRONT		(11)
+#define HEATER_ENABLE_LOWER_REAR		(12)
 
 //------------------------------------------
 // Software SPI Thermocouple Definitions
@@ -60,11 +68,30 @@ Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPE
 Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_REAR, SW_SPI_THERMO_DO);
 
-
 #define PROTOCOL_MAJOR_VERSION   0 //
 #define PROTOCOL_MINOR_VERSION   0 //
 #define PROTOCOL_BUGFIX_VERSION  0 // bugfix
 
+//------------------------------------------
+// Global Definitions
+//------------------------------------------
+struct HeaterParameters 
+{
+	boolean enabled;
+	double tempSetPointLowOn;
+	double tempSetPointHighOff;
+	uint16_t onTime;
+	uint16_t offTime;
+};
+
+HeaterParameters heaterParmsUpperFront  = {true,  200.0, 275.0,   0, 640};
+HeaterParameters heaterParmsUpperRear   = {false, 200.0, 275.0,   0, 850};
+HeaterParameters heaterParamsLowerFront = {false, 200.0, 275.0,   0, 500};
+HeaterParameters heatersParamsLowerRear = {false, 200.0, 275.0, 500,   0};
+
+//------------------------------------------
+// Setup Routines
+//------------------------------------------
 void setup()
 {
   Serial1.begin(9600); 
@@ -73,6 +100,16 @@ void setup()
   // Setup Cooling Fan as Output and Turn Off
   pinMode(COOLING_FAN_SIGNAL, OUTPUT);
   digitalWrite(COOLING_FAN_SIGNAL, LOW);	
+  
+  // Setup Heater Enables as Outputs and Turn Off
+  pinMode(HEATER_ENABLE_UPPER_FRONT, OUTPUT);
+  digitalWrite(HEATER_ENABLE_UPPER_FRONT, LOW);
+  pinMode(HEATER_ENABLE_UPPER_REAR, OUTPUT);
+  digitalWrite(HEATER_ENABLE_UPPER_REAR, LOW);
+  pinMode(HEATER_ENABLE_LOWER_FRONT, OUTPUT);
+  digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
+  pinMode(HEATER_ENABLE_LOWER_REAR, OUTPUT);
+  digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);   
 
   // Default pins set to 9 and 8 for REQN and RDYN
   // Set your REQN and RDYN here before ble_begin() if you need
@@ -85,34 +122,10 @@ void setup()
   ble_begin();
 }
 
-// Bluetooth Write String Routines
 static byte buf_len = 0;
-
-void ble_write_string(byte *bytes, uint8_t len)
-{
-  if (buf_len + len > 20)
-  {
-    for (int j = 0; j < 15000; j++)
-      ble_do_events();
-    
-    buf_len = 0;
-  }
-  
-  for (int j = 0; j < len; j++)
-  {
-    ble_write(bytes[j]);
-    buf_len++;
-  }
-    
-  if (buf_len == 20)
-  {
-    for (int j = 0; j < 15000; j++)
-      ble_do_events();
-    
-    buf_len = 0;
-  }  
-}
-
+//------------------------------------------
+// Main Loop
+//------------------------------------------
 byte queryDone = false;
 
 void loop()
@@ -264,12 +277,12 @@ double getTempThermocouple(uint8_t sensor)
   	case zoneLowerFront:
   		degreesC = thermocoupleLowerFront.readCelsius();
   		Serial1.print("tempLF");
-  		ble_write_string((byte *)"tcUF", 4);
+  		ble_write_string((byte *)"tcLF", 4);
   		break;
   	case zoneLowerRear:
   		degreesC = thermocoupleLowerRear.readCelsius();
   		Serial1.print("tempLR");
-  		ble_write_string((byte *)"tcUR", 4);  		
+  		ble_write_string((byte *)"tcLR", 4);  		
   		break;
   	default:
   	    Serial1.print("Invalid tc!");
@@ -281,22 +294,31 @@ double getTempThermocouple(uint8_t sensor)
 	return degreesC;
 };		
 	
-#if 0
-          byte buf[4];
-       Serial1.print("Internal Temp = ");
-     Serial1.println(thermocoupleUpperFront.readInternal());
-          double c = thermocoupleUpperFront.readCelsius();
-    if (isnan(c)) {
-     Serial1.println("Something wrong with thermocouple!");
-   } else {
-     Serial1.print("C = "); 
-     Serial1.println(c);
-   }
-          byte* p = (byte*)(void*)&c;
-         for (int i = 0; i < sizeof(c); i++)
-             buf[i]=*p++;
+//------------------------------------------
+// Bluetooth Write String Routines
+//------------------------------------------
+void ble_write_string(byte *bytes, uint8_t len)
+{
+  if (buf_len + len > 20)
+  {
+    for (int j = 0; j < 15000; j++)
+      ble_do_events();
+    
+    buf_len = 0;
+  }
+  
+  for (int j = 0; j < len; j++)
+  {
+    ble_write(bytes[j]);
+    buf_len++;
+  }
+    
+  if (buf_len == 20)
+  {
+    for (int j = 0; j < 15000; j++)
+      ble_do_events();
+    
+    buf_len = 0;
+  }  
+}
 
-         // ble_write_string(buf, 4);
-          ble_write_string((byte *)"hello", 5);
-        }
-#endif        
