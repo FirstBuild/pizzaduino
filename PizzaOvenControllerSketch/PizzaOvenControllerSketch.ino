@@ -26,9 +26,10 @@
 #include <SPI.h>
 #include <boards.h>
 #include <RBL_nRF8001.h>
-//#include "Boards.h"
+#include "Boards.h"
 #include "Adafruit_MAX31855.h"
 #include "FiniteStateMachine.h"
+//#include "TimerOne.h"
 
 //------------------------------------------
 // Constants
@@ -60,13 +61,22 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_FRONT		(11)
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
+// Timer1 Period in Microseconds
+#define TIMER1_PERIOD_MICRO_SEC			(30000000) //(100)
+#define TIMER1_PERIOD_CLOCK_FACTOR		(2) // Account for clock period for timer - not working automatically
+#define TIMER1_COUNTER_WRAP				(240000 / TIMER1_PERIOD_MICRO_SEC)
+
+uint16_t timer1Counter = 0;
+
 //------------------------------------------
 // Software SPI Thermocouple Definitions
 //------------------------------------------
+#if 0
 Adafruit_MAX31855 thermocoupleUpperFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_REAR, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_REAR, SW_SPI_THERMO_DO);
+#endif
 
 #define PROTOCOL_MAJOR_VERSION   0 //
 #define PROTOCOL_MINOR_VERSION   0 //
@@ -89,6 +99,18 @@ HeaterParameters heaterParmsUpperRear   = {false, 200.0, 275.0,   0, 850};
 HeaterParameters heaterParamsLowerFront = {false, 200.0, 275.0,   0, 500};
 HeaterParameters heatersParamsLowerRear = {false, 200.0, 275.0, 500,   0};
 
+#if 1
+//------------------------------------------
+//state machine setup 
+//------------------------------------------
+State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
+State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
+State stateCoolDown = State(stateCoolDownEnter, 
+	stateCoolDownUpdate, stateCoolDownExit);
+FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
+#endif
+
+ #define TOTAL_PINS              20 // 14 digital + 6 analog
 //------------------------------------------
 // Setup Routines
 //------------------------------------------
@@ -97,9 +119,28 @@ void setup()
   Serial1.begin(9600); 
   Serial.println("BLE Arduino Slave");
 
+  /* Default all to digital input */
+ 
+  for (int pin = 0; pin < TOTAL_PINS; pin++)
+  {
+    // Set pin to input with internal pull up
+    pinMode(pin, INPUT);
+    digitalWrite(pin, HIGH);
+  }
+
+#if 0
+  // Initialize Timer1
+  Timer1.initialize(TIMER1_PERIOD_MICRO_SEC / TIMER1_PERIOD_CLOCK_FACTOR);
+  Timer1.disablePwm(9);
+  Timer1.disablePwm(10); 
+  Timer1.attachInterrupt(HeaterTimerInterrupt);
+#endif
+
+#if 0
   // Setup Cooling Fan as Output and Turn Off
   pinMode(COOLING_FAN_SIGNAL, OUTPUT);
   digitalWrite(COOLING_FAN_SIGNAL, LOW);	
+
   
   // Setup Heater Enables as Outputs and Turn Off
   pinMode(HEATER_ENABLE_UPPER_FRONT, OUTPUT);
@@ -110,6 +151,7 @@ void setup()
   digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
   pinMode(HEATER_ENABLE_LOWER_REAR, OUTPUT);
   digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);   
+#endif
 
   // Default pins set to 9 and 8 for REQN and RDYN
   // Set your REQN and RDYN here before ble_begin() if you need
@@ -120,6 +162,24 @@ void setup()
   
   // Init. and start BLE library.
   ble_begin();
+  
+  //useInterrupt(true);
+}
+
+//------------------------------------------
+// Update Heater State Interrupt
+//------------------------------------------
+void HeaterTimerInterrupt(void)
+{
+  Serial.println("HeaterTimerInterrupt");
+  timer1Counter++;
+#if 0  
+  if(timer1Counter >= TIMER1_COUNTER_WRAP)
+  {
+  	timer1Counter = 0;
+  }
+#endif
+  Serial.println(timer1Counter);
 }
 
 static byte buf_len = 0;
@@ -127,9 +187,15 @@ static byte buf_len = 0;
 // Main Loop
 //------------------------------------------
 byte queryDone = false;
-
+uint16_t liveCount = 0;
 void loop()
 {
+  liveCount++;
+  if((liveCount % 10000) == 0) {
+     Serial.println(">");
+//     ble_write_string((byte *)"H", 1);
+  }   
+  // Process Blue Tooth Command if available
   while(ble_available())
   {
     byte cmd;
@@ -146,97 +212,101 @@ void loop()
         }
         break;
             
-      case 'Q': // Output TEmp
+      case 'T': // Test Thermistors
         {
-          byte buf[4];
-       Serial1.print("Internal Temp = ");
-     Serial1.println(thermocoupleUpperFront.readInternal());
-          double c = thermocoupleUpperFront.readCelsius();
-    if (isnan(c)) {
-     Serial1.println("Something wrong with thermocouple!");
-   } else {
-     Serial1.print("C = "); 
-     Serial1.println(c);
-   }
-          byte* p = (byte*)(void*)&c;
-         for (int i = 0; i < sizeof(c); i++)
-             buf[i]=*p++;
-
-         // ble_write_string(buf, 4);
-          ble_write_string((byte *)"hello", 5);
+        	double tempC;
+			tempC = getTempThermocouple(zoneUpperFront);
+			tempC = getTempThermocouple(zoneUpperRear);
+			tempC = getTempThermocouple(zoneLowerFront);
+			tempC = getTempThermocouple(zoneLowerRear);
         }
         break;
         
-      case 'Z':
+      case 'S':	// Start Pizza Oven Cycle
         {
-          byte len = ble_read();
-          byte buf[len];
-          for (int i=0;i<len;i++)
-            buf[i] = ble_read();
-          Serial.println("->");
-          Serial.print("Received: ");
-          Serial.print(len);
-          Serial.println(" byte(s)");
-          Serial.print(" Hex: ");
-          for (int i=0;i<len;i++)
-            Serial.print(buf[i], HEX);
-          Serial.println();
+			Serial.println("Start Pizza Oven Cycle");
+			if(poStateMachine.isInState(stateStandby) || 
+				poStateMachine.isInState(stateCoolDown))
+			{	
+				poStateMachine.transitionTo(stateHeatCycle);
         }
-    }
+        break;
 
+      case 'Q':	// Exit Pizza Oven Cycle
+        {
+			Serial.println("Exit Pizza Oven Cycle");
+        }
+        break;
+        
+	  default:	
+		;	
+    }
+  
+//	poStateMachine.update();
+	
+   
+  }
+ }
     // send out any outstanding data
     ble_do_events();
     buf_len = 0;
-    
-    return; // only do this task in this loop
-  }
+}
 
-  // process text data
-  if (Serial.available())
-  {
-    byte d = 'Z';
-    ble_write(d);
+//------------------------------------------
+//state machine stateStandby 
+//------------------------------------------
+//State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
 
-    delay(5);
-    while(Serial.available())
-    {
-      d = Serial.read();
-      ble_write(d);
-    }
-    
-    ble_do_events();
-    buf_len = 0;
-    
-    return;    
-  }
+void stateStandbyEnter()
+{
+}
 
-#if 0
-  // No input data, no commands, process analog data
-  if (!ble_connected())
-    queryDone = false; // reset query state
-    
-  if (queryDone) // only report data after the query state
-  { 
-    byte input_data_pending = reportDigitalInput();  
-    if (input_data_pending)
-    {
-      ble_do_events();
-      buf_len = 0;
-      
-      return; // only do this task in this loop
-    }
-    
-    reportPinAnalogData();
-    
-    ble_do_events();
-    buf_len = 0;
-    
-    return;  
-  }
- #endif 
-    
-  ble_do_events();
-  buf_len = 0;
+void stateStandbyUpdate()
+{
+
+}
+
+void stateStandbyExit()
+{
+}
+
+//------------------------------------------
+//state machine stateHeatCycle 
+//------------------------------------------
+//State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
+
+void stateHeatCycleEnter()
+{
+	// Check if Upper Front Heater is Enabled
+	if(heaterParmsUpperFront.enabled == true) 
+	{
+	}
+}
+
+void stateHeatCycleUpdate()
+{
+}
+
+void stateHeatCycleExit()
+{
+}
+
+//------------------------------------------
+//state machine stateHeatCycleComplete 
+//------------------------------------------
+//State stateCoolDown = State(stateCoolDownEnter, 
+//	stateCoolDownUpdate, stateCoolDownExit);
+
+void stateCoolDownEnter()
+{
+}
+
+void stateCoolDownUpdate()
+{
+}
+
+void stateCoolDownExit()
+{
 }
 
 //------------------------------------------
@@ -265,31 +335,36 @@ double getTempThermocouple(uint8_t sensor)
 	switch(sensor)
 	{
 	case zoneUpperFront:
-		degreesC = thermocoupleUpperFront.readCelsius();
+//		degreesC = thermocoupleUpperFront.readCelsius();
 		Serial1.print("tempUF");
 		ble_write_string((byte *)"tcUF", 4);
 		break;
   	case zoneUpperRear:
-  		degreesC = thermocoupleUpperRear.readCelsius();
+//  		degreesC = thermocoupleUpperRear.readCelsius();
   		Serial1.print("tempUR");
   		ble_write_string((byte *)"tcUR", 4);
   		break;
   	case zoneLowerFront:
-  		degreesC = thermocoupleLowerFront.readCelsius();
+//  		degreesC = thermocoupleLowerFront.readCelsius();
   		Serial1.print("tempLF");
   		ble_write_string((byte *)"tcLF", 4);
   		break;
   	case zoneLowerRear:
-  		degreesC = thermocoupleLowerRear.readCelsius();
+ // 		degreesC = thermocoupleLowerRear.readCelsius();
   		Serial1.print("tempLR");
   		ble_write_string((byte *)"tcLR", 4);  		
   		break;
   	default:
   	    Serial1.print("Invalid tc!");
 	}
-    Serial1.println(degreesC);	
-    degreesCx10 = (uint16_t) (degreesC + 0.05) * 10.0;
-    ble_write_string((byte *)&degreesCx10, 4);  // send as a binary temp * 10
+    
+    if (isnan(degreesC)) {
+      Serial1.println("Error!");
+    } else {
+    	Serial1.println(degreesC);	
+    	degreesCx10 = (uint16_t) (degreesC + 0.05) * 10.0;
+    	ble_write_string((byte *)&degreesCx10, 4);  // send as a binary temp * 10
+    }
     
 	return degreesC;
 };		
@@ -321,4 +396,3 @@ void ble_write_string(byte *bytes, uint8_t len)
     buf_len = 0;
   }  
 }
-
