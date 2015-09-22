@@ -29,7 +29,7 @@
 #include "Boards.h"
 #include "Adafruit_MAX31855.h"
 #include "FiniteStateMachine.h"
-//#include "TimerOne.h"
+#include "TimerOne.h"
 
 //------------------------------------------
 // Constants
@@ -62,11 +62,11 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
 // Timer1 Period in Microseconds
-#define TIMER1_PERIOD_MICRO_SEC			(30000000) //(100)
-#define TIMER1_PERIOD_CLOCK_FACTOR		(2) // Account for clock period for timer - not working automatically
-#define TIMER1_COUNTER_WRAP				(240000 / TIMER1_PERIOD_MICRO_SEC)
+#define TIMER1_PERIOD_MICRO_SEC			(10000000)	// 1000 ms interval to start
+#define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
+#define TIMER1_COUNTER_WRAP				(2400)      // Count down to a period of 4 minutes (240 sec)
 
-uint16_t timer1Counter = 0;
+uint32_t timer1Counter = 0;
 
 //------------------------------------------
 // Software SPI Thermocouple Definitions
@@ -111,13 +111,21 @@ FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in
 #endif
 
  #define TOTAL_PINS              20 // 14 digital + 6 analog
+ 
+#if 0 
+const byte rxPin = 0;
+const byte txPin = 1;
+
+// set up a new serial object
+SoftwareSerial Serial (rxPin, txPin);
+#endif
 //------------------------------------------
 // Setup Routines
 //------------------------------------------
 void setup()
 {
   Serial1.begin(9600); 
-  Serial.println("BLE Arduino Slave");
+  Serial1.println("BLE Arduino Slave");
 
   /* Default all to digital input */
  
@@ -128,9 +136,9 @@ void setup()
     digitalWrite(pin, HIGH);
   }
 
-#if 0
+#if 1
   // Initialize Timer1
-  Timer1.initialize(TIMER1_PERIOD_MICRO_SEC / TIMER1_PERIOD_CLOCK_FACTOR);
+  Timer1.initialize(TIMER1_PERIOD_MICRO_SEC * TIMER1_PERIOD_CLOCK_FACTOR);
   Timer1.disablePwm(9);
   Timer1.disablePwm(10); 
   Timer1.attachInterrupt(HeaterTimerInterrupt);
@@ -171,15 +179,16 @@ void setup()
 //------------------------------------------
 void HeaterTimerInterrupt(void)
 {
-  Serial.println("HeaterTimerInterrupt");
-  timer1Counter++;
-#if 0  
+//    Serial.println("I");
+ 	ble_write_string((byte *)"I", 1);  
+  	timer1Counter++;
+#if 1  
   if(timer1Counter >= TIMER1_COUNTER_WRAP)
   {
   	timer1Counter = 0;
   }
 #endif
-  Serial.println(timer1Counter);
+//  Serial.println(timer1Counter); 
 }
 
 static byte buf_len = 0;
@@ -187,32 +196,32 @@ static byte buf_len = 0;
 // Main Loop
 //------------------------------------------
 byte queryDone = false;
-uint16_t liveCount = 0;
+uint32_t liveCount = 0;
 void loop()
 {
   liveCount++;
-  if((liveCount % 10000) == 0) {
-     Serial.println(">");
-//     ble_write_string((byte *)"H", 1);
+  if((liveCount % 100000) == 0) {
+     Serial1.println("@");
+    ble_write_string((byte *)"@", 1);
   }   
   // Process Blue Tooth Command if available
   while(ble_available())
   {
     byte cmd;
     cmd = ble_read();
-    Serial.write(cmd);
+    Serial1.write(cmd);
     
     // Parse data here
     switch (cmd)
     {
-      case 'V': // query protocol version
+      case 'v': // query protocol version
         {
           byte buf[] = {'V', 'a', 'b', 'c'};
           ble_write_string(buf, 4);
         }
         break;
             
-      case 'T': // Test Thermistors
+      case 't': // Test Thermistors
         {
         	double tempC;
 			tempC = getTempThermocouple(zoneUpperFront);
@@ -222,32 +231,31 @@ void loop()
         }
         break;
         
-      case 'S':	// Start Pizza Oven Cycle
+      case 's':	// Start Pizza Oven Cycle
         {
-			Serial.println("Start Pizza Oven Cycle");
-			if(poStateMachine.isInState(stateStandby) || 
-				poStateMachine.isInState(stateCoolDown))
-			{	
+			Serial1.println("Start Pizza Oven Cycle");
+#if 0			
+//			if(poStateMachine.isInState(stateStandby) || 
+//				poStateMachine.isInState(stateCoolDown))
 				poStateMachine.transitionTo(stateHeatCycle);
+#endif
         }
         break;
 
-      case 'Q':	// Exit Pizza Oven Cycle
+      case 'q':	// Exit Pizza Oven Cycle
         {
-			Serial.println("Exit Pizza Oven Cycle");
+			Serial1.println("Exit Pizza Oven Cycle");
         }
         break;
         
 	  default:	
 		;	
-    }
-  
-//	poStateMachine.update();
-	
-   
-  }
+    }	
+// 	poStateMachine.update();  
  }
-    // send out any outstanding data
+// 	poStateMachine.update();
+ 	
+ 	// send out any outstanding data
     ble_do_events();
     buf_len = 0;
 }
@@ -259,11 +267,11 @@ void loop()
 
 void stateStandbyEnter()
 {
+	Serial.println("stateStandbyEnter");
 }
 
 void stateStandbyUpdate()
 {
-
 }
 
 void stateStandbyExit()
@@ -277,14 +285,19 @@ void stateStandbyExit()
 
 void stateHeatCycleEnter()
 {
+	Serial.println("stateHeatCycleEnter");
+	ble_write_string((byte *)"HC",2);
 	// Check if Upper Front Heater is Enabled
 	if(heaterParmsUpperFront.enabled == true) 
 	{
+	
 	}
 }
 
 void stateHeatCycleUpdate()
 {
+	Serial.println("stateHeatCycleUpdate");
+		ble_write_string((byte *)"HU",2);
 }
 
 void stateHeatCycleExit()
