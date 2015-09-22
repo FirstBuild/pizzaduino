@@ -62,9 +62,9 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
 // Timer1 Period in Microseconds
-#define TIMER1_PERIOD_MICRO_SEC			(10000000)	// 1000 ms interval to start
+#define TIMER1_PERIOD_MICRO_SEC			(1000000)	// 1 s interval to start
 #define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
-#define TIMER1_COUNTER_WRAP				(2400)      // Count down to a period of 4 minutes (240 sec)
+#define TIMER1_COUNTER_WRAP				(240)      // Count down to a period of 4 minutes (240 sec)
 
 uint32_t timer1Counter = 0;
 
@@ -99,7 +99,6 @@ HeaterParameters heaterParmsUpperRear   = {false, 200.0, 275.0,   0, 850};
 HeaterParameters heaterParamsLowerFront = {false, 200.0, 275.0,   0, 500};
 HeaterParameters heatersParamsLowerRear = {false, 200.0, 275.0, 500,   0};
 
-#if 1
 //------------------------------------------
 //state machine setup 
 //------------------------------------------
@@ -108,17 +107,9 @@ State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHea
 State stateCoolDown = State(stateCoolDownEnter, 
 	stateCoolDownUpdate, stateCoolDownExit);
 FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
-#endif
 
  #define TOTAL_PINS              20 // 14 digital + 6 analog
  
-#if 0 
-const byte rxPin = 0;
-const byte txPin = 1;
-
-// set up a new serial object
-SoftwareSerial Serial (rxPin, txPin);
-#endif
 //------------------------------------------
 // Setup Routines
 //------------------------------------------
@@ -201,11 +192,12 @@ void loop()
 {
   liveCount++;
   if((liveCount % 100000) == 0) {
-     Serial1.println("@");
-    ble_write_string((byte *)"@", 1);
+     Serial1.println("?");
+    ble_write_string((byte *)"?", 1);
   }   
   // Process Blue Tooth Command if available
-  while(ble_available())
+//  while(ble_available())
+  if(ble_available())
   {
     byte cmd;
     cmd = ble_read();
@@ -225,35 +217,46 @@ void loop()
         {
         	double tempC;
 			tempC = getTempThermocouple(zoneUpperFront);
-			tempC = getTempThermocouple(zoneUpperRear);
-			tempC = getTempThermocouple(zoneLowerFront);
-			tempC = getTempThermocouple(zoneLowerRear);
+//			tempC = getTempThermocouple(zoneUpperRear);
+//			tempC = getTempThermocouple(zoneLowerFront);
+//			tempC = getTempThermocouple(zoneLowerRear);
         }
         break;
         
       case 's':	// Start Pizza Oven Cycle
-        {
-			Serial1.println("Start Pizza Oven Cycle");
-#if 0			
-//			if(poStateMachine.isInState(stateStandby) || 
-//				poStateMachine.isInState(stateCoolDown))
+        {			
+			Serial1.println("Start");
+			if(poStateMachine.isInState(stateStandby) || 
+				poStateMachine.isInState(stateCoolDown))
+			{					
 				poStateMachine.transitionTo(stateHeatCycle);
-#endif
+			}
+			else
+			{
+				Serial1.println("Invalid");
+			}	
         }
         break;
 
       case 'q':	// Exit Pizza Oven Cycle
         {
-			Serial1.println("Exit Pizza Oven Cycle");
+			Serial1.println("Exit");			
+			if(poStateMachine.isInState(stateHeatCycle)) 
+			{
+				poStateMachine.transitionTo(stateCoolDown);
+			}
+			else
+			{
+				Serial1.println("Invalid");			
+			}		
         }
         break;
         
 	  default:	
 		;	
-    }	
-// 	poStateMachine.update();  
+    }	  
  }
-// 	poStateMachine.update();
+ 	poStateMachine.update();
  	
  	// send out any outstanding data
     ble_do_events();
@@ -267,15 +270,18 @@ void loop()
 
 void stateStandbyEnter()
 {
-	Serial.println("stateStandbyEnter");
+	Serial1.println("stateStandbyEnter");
 }
 
 void stateStandbyUpdate()
 {
+  if((liveCount % 100000) == 0) 
+     Serial1.println("SU");
 }
 
 void stateStandbyExit()
 {
+	     Serial1.println("SX");
 }
 
 //------------------------------------------
@@ -285,8 +291,7 @@ void stateStandbyExit()
 
 void stateHeatCycleEnter()
 {
-	Serial.println("stateHeatCycleEnter");
-	ble_write_string((byte *)"HC",2);
+	Serial1.println("stateHeatCycleEnter");
 	// Check if Upper Front Heater is Enabled
 	if(heaterParmsUpperFront.enabled == true) 
 	{
@@ -296,30 +301,35 @@ void stateHeatCycleEnter()
 
 void stateHeatCycleUpdate()
 {
-	Serial.println("stateHeatCycleUpdate");
-		ble_write_string((byte *)"HU",2);
+    if((liveCount % 100000) == 0) 
+      Serial1.println("HU");
 }
 
 void stateHeatCycleExit()
 {
+	     Serial1.println("HX");
 }
 
 //------------------------------------------
-//state machine stateHeatCycleComplete 
+//state machine stateCoolDown 
 //------------------------------------------
 //State stateCoolDown = State(stateCoolDownEnter, 
 //	stateCoolDownUpdate, stateCoolDownExit);
 
 void stateCoolDownEnter()
 {
+	Serial1.println("stateCoolDown");
 }
 
 void stateCoolDownUpdate()
 {
+    if((liveCount % 100000) == 0) 
+      Serial1.println("CU");
 }
 
 void stateCoolDownExit()
 {
+	     Serial1.println("CX");
 }
 
 //------------------------------------------
