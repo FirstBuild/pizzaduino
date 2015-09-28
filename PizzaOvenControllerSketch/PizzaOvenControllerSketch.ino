@@ -44,16 +44,18 @@ static const uint8_t zoneLowerRear  = 4;
 // Pin Definitions
 //------------------------------------------
 
-#define COOLING_FAN_SIGNAL 				(0)
+#define COOLING_FAN_SIGNAL 				(A0)
 
 // TBD HW Pin Defs Out of Order and need to be checked.
 // Thermocouple Pin Definitions
-#define SW_SPI_THERMO_DO                (2)
-#define SW_SPI_THERMO_CLK               (5)
-#define SW_SPI_THERMO_CS_UPPER_FRONT	(3)
-#define SW_SPI_THERMO_CS_UPPER_REAR		(8)
-#define SW_SPI_THERMO_CS_LOWER_FRONT	(5)
-#define SW_SPI_THERMO_CS_LOWER_REAR		(3)
+#define SW_SPI_THERMO_DO                (A4)
+#define SW_SPI_THERMO_CLK               (A5)
+#define SW_SPI_THERMO_CS_UPPER_FRONT	(8)
+#define SW_SPI_THERMO_CS_UPPER_REAR		(5)
+#define SW_SPI_THERMO_CS_LOWER_FRONT	(3)
+#define SW_SPI_THERMO_CS_LOWER_REAR		(2)
+
+// TBD Fan Temp TC5 on Reset?
 
 // Heater Enable Pin Definitions
 #define HEATER_ENABLE_UPPER_FRONT		(9)
@@ -62,14 +64,14 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
 // Timer1 Used to keep track of 4 second heat control cycles
-#define TIMER1_PERIOD_MICRO_SEC			(10000)		// 100 ms interval to start
+#define TIMER1_PERIOD_MICRO_SEC			(100000)		// 100 ms interval to start
 #define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
 #define TIMER1_COUNTER_WRAP				(40)        // Count down to a period of 4 seconds
 
 //------------------------------------------
 // Software SPI Thermocouple Definitions
 //------------------------------------------
-#if 0
+#if 1
 Adafruit_MAX31855 thermocoupleUpperFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_REAR, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
@@ -87,6 +89,8 @@ Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWE
 // Timer one is running to control heat percentage and start
 //  Re-synchronized on the start of heating
 volatile uint16_t timer1Counter = 0;
+
+double testTemp;
 
 struct HeaterParameters 
 {
@@ -260,21 +264,21 @@ void setup()
   Timer1.attachInterrupt(HeaterTimerInterrupt);
 #endif
 
-#if 0
+#if 1
   // Setup Cooling Fan as Output and Turn Off
   pinMode(COOLING_FAN_SIGNAL, OUTPUT);
-  digitalWrite(COOLING_FAN_SIGNAL, LOW);	
+  digitalWrite(COOLING_FAN_SIGNAL, HIGH);	
 
   
   // Setup Heater Enables as Outputs and Turn Off
   pinMode(HEATER_ENABLE_UPPER_FRONT, OUTPUT);
-  digitalWrite(HEATER_ENABLE_UPPER_FRONT, LOW);
+  digitalWrite(HEATER_ENABLE_UPPER_FRONT, HIGH);
   pinMode(HEATER_ENABLE_UPPER_REAR, OUTPUT);
-  digitalWrite(HEATER_ENABLE_UPPER_REAR, LOW);
+  digitalWrite(HEATER_ENABLE_UPPER_REAR, HIGH);
   pinMode(HEATER_ENABLE_LOWER_FRONT, OUTPUT);
-  digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
+  digitalWrite(HEATER_ENABLE_LOWER_FRONT, HIGH);
   pinMode(HEATER_ENABLE_LOWER_REAR, OUTPUT);
-  digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);   
+  digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);   
 #endif
 
   // Default pins set to 9 and 8 for REQN and RDYN
@@ -295,7 +299,7 @@ void setup()
 //------------------------------------------
 void HeaterTimerInterrupt(void)
 {
-	ble_write_string((byte *)"I", 1);  
+//	ble_write_string((byte *)"I", 1);  
 	timer1Counter++;
 
   if(timer1Counter > TIMER1_COUNTER_WRAP)
@@ -312,16 +316,18 @@ static byte buf_len = 0;
 //------------------------------------------
 byte queryDone = false;
 uint32_t liveCount = 0;
+uint16_t inputValue;
 
 void loop()
 {
   liveCount++;
   if((liveCount % 100000) == 0) {
-     Serial1.println(">");
-    ble_write_string((byte *)">", 1);
-  }   
+     Serial1.println("[");
+    ble_write_string((byte *)"[", 1);
+  }
+     
   // Process Blue Tooth Command if available
-//  while(ble_available())
+  // TBD ble_available returns -1 if nothing available switch ignores?
   if(ble_available())
   {
     byte cmd;
@@ -340,11 +346,12 @@ void loop()
             
       case 't': // Test Thermistors
         {
+            Serial1.println("Tc");
         	double tempC;
 			tempC = getTempThermocouple(zoneUpperFront);
-//			tempC = getTempThermocouple(zoneUpperRear);
-//			tempC = getTempThermocouple(zoneLowerFront);
-//			tempC = getTempThermocouple(zoneLowerRear);
+			tempC = getTempThermocouple(zoneUpperRear);
+			tempC = getTempThermocouple(zoneLowerFront);
+			tempC = getTempThermocouple(zoneLowerRear);
         }
         break;
         
@@ -376,6 +383,15 @@ void loop()
 			}		
         }
         break;
+
+      case 'n':	// Test input integer parameter and set test temperature
+        {
+			Serial1.println("input n test");
+			inputValue = GetInputValue();
+			Serial1.println(inputValue);
+			testTemp = (double) inputValue;			
+        }
+        break;
         
 	  default:	
 		;	
@@ -387,7 +403,52 @@ void loop()
     ble_do_events();
     buf_len = 0;
 }
+#if 1
+bool CharValidDigit(unsigned char digit)
+{
+	if((digit >= '0') && (digit <= '9'))
+		return true;
+	else 
+		return false;	
+}
 
+uint16_t GetInputValue()
+{
+	uint16_t inputValue = 0;
+	unsigned char cBytesAvailable;
+	byte nBytesAvailable;
+	unsigned char digit;
+	uint16_t loop;
+	
+	cBytesAvailable = ble_available();
+//	Serial1.println((uint16_t)cBytesAvailable);
+	if(cBytesAvailable > 0)
+	{
+		nBytesAvailable = (byte)cBytesAvailable;
+		// limit to 4 digits at most
+		if(nBytesAvailable > 4)
+		{
+			nBytesAvailable = 4;
+		}
+		
+		for(loop=0; loop < nBytesAvailable; loop++)
+		{ 
+			digit = ble_read();
+			if(CharValidDigit(digit))
+			{
+				inputValue *= 10;
+				inputValue += (uint16_t)(digit -'0');
+			}
+			else
+			{
+				inputValue = 0;
+				break;
+			}	
+		}			     
+	}
+	return inputValue;
+}
+#endif
 //------------------------------------------
 //state machine stateStandby 
 //------------------------------------------
@@ -489,25 +550,28 @@ double getTempThermocouple(uint8_t sensor)
 	
 	switch(sensor)
 	{
+	case 0:
+		degreesC = testTemp;
+		break;
 	case zoneUpperFront:
-//		degreesC = thermocoupleUpperFront.readCelsius();
+		degreesC = thermocoupleUpperFront.readCelsius();
 		Serial1.print("tempUF");
-		ble_write_string((byte *)"tcUF", 4);
+//		ble_write_string((byte *)"tcUF", 4);
 		break;
   	case zoneUpperRear:
-//  		degreesC = thermocoupleUpperRear.readCelsius();
+  		degreesC = thermocoupleUpperRear.readCelsius();
   		Serial1.print("tempUR");
-  		ble_write_string((byte *)"tcUR", 4);
+//  		ble_write_string((byte *)"tcUR", 4);
   		break;
   	case zoneLowerFront:
-//  		degreesC = thermocoupleLowerFront.readCelsius();
+  		degreesC = thermocoupleLowerFront.readCelsius();
   		Serial1.print("tempLF");
-  		ble_write_string((byte *)"tcLF", 4);
+//  		ble_write_string((byte *)"tcLF", 4);
   		break;
   	case zoneLowerRear:
- // 		degreesC = thermocoupleLowerRear.readCelsius();
+ 		degreesC = thermocoupleLowerRear.readCelsius();
   		Serial1.print("tempLR");
-  		ble_write_string((byte *)"tcLR", 4);  		
+//  		ble_write_string((byte *)"tcLR", 4);  		
   		break;
   	default:
   	    Serial1.print("Invalid tc!");
