@@ -64,19 +64,17 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
 // Timer1 Used to keep track of 4 second heat control cycles
-#define TIMER1_PERIOD_MICRO_SEC			(100000)		// 100 ms interval to start
+#define TIMER1_PERIOD_MICRO_SEC			(1000000)		// 100 ms interval to start
 #define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
-#define TIMER1_COUNTER_WRAP				(40)        // Count down to a period of 4 seconds
+#define TIMER1_COUNTER_WRAP				(60)        // Count down to a period of 4 seconds
 
 //------------------------------------------
 // Software SPI Thermocouple Definitions
 //------------------------------------------
-#if 1
 Adafruit_MAX31855 thermocoupleUpperFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_REAR, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_REAR, SW_SPI_THERMO_DO);
-#endif
 
 #define PROTOCOL_MAJOR_VERSION   0 //
 #define PROTOCOL_MINOR_VERSION   0 //
@@ -101,8 +99,8 @@ struct HeaterParameters
 	uint16_t offPercent;      // Time when a heater turns off in a 4 second cycle in percent
 };
 
-HeaterParameters heaterParmsUpperFront = {true,  200, 275,   0, 71};
-HeaterParameters heaterParmsUpperRear  = {false, 200, 275,   0, 64};
+HeaterParameters heaterParmsUpperFront = {true,  200, 275,   75, 100};
+HeaterParameters heaterParmsUpperRear = {true,  200, 275,   75, 100};
 HeaterParameters heaterParmsLowerFront = {false, 200, 275,  50, 90};
 HeaterParameters heaterParmsLowerRear  = {false, 200, 275,   0, 33};
 
@@ -131,6 +129,9 @@ void ConvertHeaterPercentCounts()
 {
 	heaterCountsOnUpperFront  = (uint16_t)(((uint32_t) heaterParmsUpperFront.onPercent  * TIMER1_COUNTER_WRAP) / 100);
 	heaterCountsOffUpperFront = (uint16_t)(((uint32_t) heaterParmsUpperFront.offPercent * TIMER1_COUNTER_WRAP) / 100);
+	Serial1.println("counts");
+	Serial1.println(heaterCountsOnUpperFront);
+    Serial1.println(heaterCountsOffUpperFront);
 	heaterCountsOnUpperRear   = (uint16_t)(((uint32_t) heaterParmsUpperRear.onPercent   * TIMER1_COUNTER_WRAP) / 100);
 	heaterCountsOffUpperRear  = (uint16_t)(((uint32_t) heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP) / 100);
 	heaterCountsOnLowerFront  = (uint16_t)(((uint32_t) heaterParmsLowerFront.onPercent  * TIMER1_COUNTER_WRAP) / 100);
@@ -180,62 +181,51 @@ void AllHeatersOffStateClear()
 void UpdateHeatControl(uint16_t currentCounterTimer)
 {	
 	double tempC;
+	uint16_t icase;
 	
 	heaterHardwareStateUpperFront = false;
+	icase = 0;
 	if((heaterParmsUpperFront.enabled = true) &&
 	   (currentCounterTimer >= heaterCountsOnUpperFront) &&
 	   (currentCounterTimer < heaterCountsOffUpperFront))
 	{   
-			tempC = getTempThermocouple(zoneUpperFront); 
-			
+//			tempC = getTempThermocouple(zoneUpperFront); 
+			tempC = getTempThermocouple(0);			
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateUpperFront == false) && (tempC < (double)heaterParmsUpperFront.tempSetPointHighOff))
 			{
+				icase = 1;
 				heaterHardwareStateUpperFront = true;
 			}
 			// If not in cool down and greater than High Set Point turn off heater and set cool down
 			else if((heaterCoolDownStateUpperFront == false) && (tempC >= (double)heaterParmsUpperFront.tempSetPointHighOff))	
 			{
+				icase = 2;				
 				heaterCoolDownStateUpperFront = true;
 				heaterHardwareStateUpperFront = false;
 			}
 			// If in cool down and less than equal than low set point, exit cool down and turn heater on
 			else if((heaterCoolDownStateUpperFront == true) && (tempC <= (double)heaterParmsUpperFront.tempSetPointLowOn))	
 			{
+				icase = 3;
 				heaterCoolDownStateUpperFront = false;
 				heaterHardwareStateUpperFront = true;
 			}
 			else // In cool down but have not reached the Low Set Point
 			{
+				icase = 4;
 				heaterHardwareStateUpperFront = false;
 			}
 	}
 	else	// Outside the percentage limits of the cycle
 	{
+	        icase = 9;
 			heaterCoolDownStateUpperFront = false;
 			heaterHardwareStateUpperFront = false;
 	}
 	
-#if 0			
-	heaterParmsStateUpperRear = false;	
-	if((heaterParmsUpperRear.enabled = true) &&
-	   (saveTimer1Counter >= heaterCountsOnUpperRear) &&
-	   (saveTimer1Counter < heaterCountsOffUpperRear))
-			heaterParmsStateUpperRear = true;
-				
-	heaterParmsStateLowerFront = false;
-	if((heaterParmsLowerFront.enabled = true) &&
-	   (saveTimer1Counter >= heaterCountsOnLowerFront) &&
-	   (saveTimer1Counter < heaterCountsOffLowerFront))
-			heaterParmsStateLowerFront = true;
-			
-	heaterParmsStateLowerRear = false;	
-	if((heaterParmsLowerRear.enabled = true) &&
-	   (saveTimer1Counter >= heaterCountsOnLowerRear) &&
-	   (saveTimer1Counter < heaterCountsOffLowerRear))
-			heaterParmsStateLowerRear = true;
-#endif
-
+    Serial1.println("icase");
+    Serial1.println(icase);
 	UpdateHeaterHardware();
 }
 
@@ -267,7 +257,7 @@ void setup()
 #if 1
   // Setup Cooling Fan as Output and Turn Off
   pinMode(COOLING_FAN_SIGNAL, OUTPUT);
-  digitalWrite(COOLING_FAN_SIGNAL, HIGH);	
+  digitalWrite(COOLING_FAN_SIGNAL, LOW);	
 
   
   // Setup Heater Enables as Outputs and Turn Off
@@ -278,9 +268,11 @@ void setup()
   pinMode(HEATER_ENABLE_LOWER_FRONT, OUTPUT);
   digitalWrite(HEATER_ENABLE_LOWER_FRONT, HIGH);
   pinMode(HEATER_ENABLE_LOWER_REAR, OUTPUT);
-  digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);   
+  digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH); 
 #endif
 
+  ConvertHeaterPercentCounts();
+   
   // Default pins set to 9 and 8 for REQN and RDYN
   // Set your REQN and RDYN here before ble_begin() if you need
   //ble_set_pins(3, 2);
@@ -322,8 +314,8 @@ void loop()
 {
   liveCount++;
   if((liveCount % 100000) == 0) {
-     Serial1.println("[");
-    ble_write_string((byte *)"[", 1);
+//     Serial1.println("^");
+    ble_write_string((byte *)"#", 1);
   }
      
   // Process Blue Tooth Command if available
@@ -403,6 +395,7 @@ void loop()
     ble_do_events();
     buf_len = 0;
 }
+
 #if 1
 bool CharValidDigit(unsigned char digit)
 {
@@ -480,21 +473,26 @@ void stateHeatCycleEnter()
 {
 	Serial1.println("stateHeatCycleEnter");
 	
-	// Start the timer1 counter over at the start of heat cycle
+	// Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
 	timer1Counter = 0;
+	
+	CoolingFanControl(true);
 }
 
 void stateHeatCycleUpdate()
 {
-    if((liveCount % 100000) == 0) 
-      Serial1.println("HU");
+//    if((liveCount % 100) == 0) 
+//      Serial1.println("HU");
     
     // Save working value timer1Counter since can be updated by interrupt  
     saveTimer1Counter = timer1Counter;
     
     // Only update heat control if Timer1 Counter changed
+    
     if(saveTimer1Counter != lastTimer1Counter)
     {
+//		Serial1.println(saveTimer1Counter);
+//		Serial1.println(lastTimer1Counter);;    
     	UpdateHeatControl(saveTimer1Counter);
     	lastTimer1Counter = saveTimer1Counter;	
     }  
