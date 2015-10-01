@@ -32,6 +32,16 @@
 #include "TimerOne.h"
 
 //------------------------------------------
+// Macros
+//------------------------------------------
+#define PROTOCOL_MAJOR_VERSION   0 //
+#define PROTOCOL_MINOR_VERSION   1 //
+#define PROTOCOL_BUGFIX_VERSION  0 // bugfix
+
+// If defined inputs temperatures from Blue Tooth 'n' command
+#define DEBUG_INPUT_TEMP
+
+//------------------------------------------
 // Constants
 //------------------------------------------
 
@@ -64,7 +74,7 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
 // Timer1 Used to keep track of 4 second heat control cycles
-#define TIMER1_PERIOD_MICRO_SEC			(100000)		// 100 ms interval to start
+#define TIMER1_PERIOD_MICRO_SEC			(100000)	// 100 ms interval to start
 #define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
 #define TIMER1_COUNTER_WRAP				(600)        // Count down to a period of 4 seconds
 
@@ -76,9 +86,7 @@ Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPE
 Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_REAR, SW_SPI_THERMO_DO);
 
-#define PROTOCOL_MAJOR_VERSION   0 //
-#define PROTOCOL_MINOR_VERSION   0 //
-#define PROTOCOL_BUGFIX_VERSION  0 // bugfix
+
 
 //------------------------------------------
 // Global Definitions
@@ -99,10 +107,17 @@ struct HeaterParameters
 	uint16_t offPercent;      // Time when a heater turns off in a 4 second cycle in percent
 };
 
+#if 0
 HeaterParameters heaterParmsUpperFront = {true, 700, 800,   0, 64};
 HeaterParameters heaterParmsUpperRear  = {true, 500, 600,   0, 71};
 HeaterParameters heaterParmsLowerFront = {true, 300, 400,   0, 33};
 HeaterParameters heaterParmsLowerRear  = {true, 100, 200,  50, 90};
+#else
+HeaterParameters heaterParmsUpperFront = {true, 701, 802,   3, 104};
+HeaterParameters heaterParmsUpperRear  = {true, 505, 606,   7, 108};
+HeaterParameters heaterParmsLowerFront = {true, 310, 420,   30, 140};
+HeaterParameters heaterParmsLowerRear  = {true, 150, 260,   70, 180};
+#endif
 
 uint16_t heaterCountsOnUpperFront;
 uint16_t heaterCountsOffUpperFront;
@@ -125,6 +140,10 @@ bool heaterCoolDownStateUpperRear  = false;
 bool heaterCoolDownStateLowerFront = false;
 bool heaterCoolDownStateLowerRear  = false;
 
+//------------------------------------------
+// Code
+//------------------------------------------
+
 void ConvertHeaterPercentCounts()
 {
 	// TBD add round up so can have a 0 to 100% without turning off
@@ -133,10 +152,7 @@ void ConvertHeaterPercentCounts()
 	heaterCountsOffUpperFront = (uint16_t)(((uint32_t) heaterParmsUpperFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100);
     
 	heaterCountsOnUpperRear   = (uint16_t)(((uint32_t) heaterParmsUpperRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100);
-	heaterCountsOffUpperRear  = (uint16_t)(((uint32_t) heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100);
-
-	Serial1.println(heaterCountsOnUpperRear);
-    Serial1.println(heaterCountsOffUpperRear);	
+	heaterCountsOffUpperRear  = (uint16_t)(((uint32_t) heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100);	
     
 	heaterCountsOnLowerFront  = (uint16_t)(((uint32_t) heaterParmsLowerFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100);
 	heaterCountsOffLowerFront = (uint16_t)(((uint32_t) heaterParmsLowerFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100);
@@ -193,8 +209,8 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnUpperFront) &&
 	   (currentCounterTimer <= heaterCountsOffUpperFront))
 	{   
-//			tempC = getTempThermocouple(zoneUpperFront); 
-			tempC = getTempThermocouple(0);			
+			tempC = getTempThermocouple(zoneUpperFront); 
+		
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateUpperFront == false) && (tempC < (double)heaterParmsUpperFront.tempSetPointHighOff))
 			{
@@ -242,8 +258,8 @@ void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnUpperRear) &&
 	   (currentCounterTimer <= heaterCountsOffUpperRear))
 	{   
-//			tempC = getTempThermocouple(zoneUpperRear); 
-			tempC = getTempThermocouple(0);			
+			tempC = getTempThermocouple(zoneUpperRear); 
+		
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateUpperRear == false) && (tempC < (double)heaterParmsUpperRear.tempSetPointHighOff))
 			{
@@ -291,8 +307,8 @@ void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnLowerFront) &&
 	   (currentCounterTimer <= heaterCountsOffLowerFront))
 	{   
-//			tempC = getTempThermocouple(zoneLowerFront); 
-			tempC = getTempThermocouple(0);			
+			tempC = getTempThermocouple(zoneLowerFront); 
+			
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateLowerFront == false) && (tempC < (double)heaterParmsLowerFront.tempSetPointHighOff))
 			{
@@ -340,8 +356,8 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnLowerRear) &&
 	   (currentCounterTimer <= heaterCountsOffLowerRear))
 	{   
-//			tempC = getTempThermocouple(zoneLowerRear); 
-			tempC = getTempThermocouple(0);			
+			tempC = getTempThermocouple(zoneLowerRear); 
+			
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateLowerRear == false) && (tempC < (double)heaterParmsLowerRear.tempSetPointHighOff))
 			{
@@ -395,30 +411,26 @@ void setup()
   Serial1.begin(9600); 
   Serial1.println("BLE Arduino Slave");
 
-#if 1
   // Initialize Timer1
   Timer1.initialize(TIMER1_PERIOD_MICRO_SEC * TIMER1_PERIOD_CLOCK_FACTOR);
   Timer1.disablePwm(9);
   Timer1.disablePwm(10); 
   Timer1.attachInterrupt(HeaterTimerInterrupt);
-#endif
 
-#if 1
+
   // Setup Cooling Fan as Output and Turn Off
   pinMode(COOLING_FAN_SIGNAL, OUTPUT);
   digitalWrite(COOLING_FAN_SIGNAL, LOW);	
-
   
   // Setup Heater Enables as Outputs and Turn Off
   pinMode(HEATER_ENABLE_UPPER_FRONT, OUTPUT);
-  digitalWrite(HEATER_ENABLE_UPPER_FRONT, HIGH);
+  digitalWrite(HEATER_ENABLE_UPPER_FRONT, LOW);
   pinMode(HEATER_ENABLE_UPPER_REAR, OUTPUT);
-  digitalWrite(HEATER_ENABLE_UPPER_REAR, HIGH);
+  digitalWrite(HEATER_ENABLE_UPPER_REAR, LOW);
   pinMode(HEATER_ENABLE_LOWER_FRONT, OUTPUT);
-  digitalWrite(HEATER_ENABLE_LOWER_FRONT, HIGH);
+  digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
   pinMode(HEATER_ENABLE_LOWER_REAR, OUTPUT);
-  digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH); 
-#endif
+  digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW); 
 
   ConvertHeaterPercentCounts();
    
@@ -461,15 +473,21 @@ uint16_t inputValue;
 
 void loop()
 {
+byte buf[] = {'V', 'a', 'b', 'c'};
+char formatStr[25];
+uint16_t strLen;
+
+#if 0
   liveCount++;
   if((liveCount % 100000) == 0) {
 //     Serial1.println("^");
 //    ble_write_string((byte *)'A', 1);
   }
+#endif
      
   // Process Blue Tooth Command if available
-  // TBD ble_available returns -1 if nothing available switch ignores?
-  if(ble_available())
+  // TBD ble_available returns -1 if nothing available
+  if(ble_available() > 0)
   {
     byte cmd;
     cmd = ble_read();
@@ -479,59 +497,196 @@ void loop()
     switch (cmd)
     {
       case 'v': // query protocol version
-        {
-          byte buf[] = {'V', 'a', 'b', 'c'};
-          ble_write_string(buf, 4);
-        }
-        break;
+          strLen = sprintf(formatStr,"V %u.%u bugfix %u\n", 
+				(uint16_t)PROTOCOL_MAJOR_VERSION, (uint16_t)PROTOCOL_MINOR_VERSION, (uint16_t)PROTOCOL_BUGFIX_VERSION);
+          if(strLen>0)
+            ble_write_string((byte *)&formatStr, strLen);	
+	      break;
+
+      case 'p': // query heat control parameters
+		if(ble_available() >= 1)
+		{
+		    cmd = ble_read();
+			Serial1.write(cmd);
+			
+			switch(cmd)
+			{
+			case '1' :			
+          		strLen = sprintf(formatStr,"UF %u %u %u %u\n", 
+					heaterParmsUpperFront.tempSetPointLowOn, heaterParmsUpperFront.tempSetPointHighOff,
+					heaterParmsUpperFront.onPercent, heaterParmsUpperFront.offPercent);
+				break;          	
+			case '2' :			
+          		strLen = sprintf(formatStr,"UR %u %u %u %u\n", 
+					heaterParmsUpperRear.tempSetPointLowOn, heaterParmsUpperRear.tempSetPointHighOff,
+					heaterParmsUpperRear.onPercent, heaterParmsUpperRear.offPercent);
+				break;          	
+			case '3' :			
+          		strLen = sprintf(formatStr,"LF %u %u %u %u\n", 
+					heaterParmsLowerFront.tempSetPointLowOn, heaterParmsLowerFront.tempSetPointHighOff,
+					heaterParmsLowerFront.onPercent, heaterParmsLowerFront.offPercent);
+				break;
+			case '4' :			
+          		strLen = sprintf(formatStr,"LR %u %u %u %u\n", 
+					heaterParmsLowerRear.tempSetPointLowOn, heaterParmsLowerRear.tempSetPointHighOff,
+					heaterParmsLowerRear.onPercent, heaterParmsLowerRear.offPercent);
+				break;
+			default:
+				;
+			}			 				    
+   
+          if(strLen>0)
+            ble_write_string((byte *)&formatStr, strLen);
+        }    	
+	    break;
             
       case 't': // Test Thermistors
-        {
-            Serial1.println("Tc");
-        	double tempC;
-			tempC = getTempThermocouple(zoneUpperFront);
-			tempC = getTempThermocouple(zoneUpperRear);
-			tempC = getTempThermocouple(zoneLowerFront);
-			tempC = getTempThermocouple(zoneLowerRear);
-        }
+        Serial1.println("Tc");
+    	double tempC;
+		tempC = getTempThermocouple(zoneUpperFront);
+		tempC = getTempThermocouple(zoneUpperRear);
+		tempC = getTempThermocouple(zoneLowerFront);
+		tempC = getTempThermocouple(zoneLowerRear);
         break;
         
-      case 's':	// Start Pizza Oven Cycle
-        {			
-			Serial1.println("Start");
-			if(poStateMachine.isInState(stateStandby) || 
-				poStateMachine.isInState(stateCoolDown))
-			{					
-				poStateMachine.transitionTo(stateHeatCycle);
-			}
-			else
-			{
-				Serial1.println("Invalid");
-			}	
-        }
+      case 's':	// Start Pizza Oven Cycle			
+		Serial1.println("Start");
+		if(poStateMachine.isInState(stateStandby) || 
+			poStateMachine.isInState(stateCoolDown))
+		{					
+			poStateMachine.transitionTo(stateHeatCycle);
+		}
+		else
+		{
+			Serial1.println("Invalid");
+		}	
         break;
 
       case 'q':	// Exit Pizza Oven Cycle
-        {
-			Serial1.println("Exit");			
-			if(poStateMachine.isInState(stateHeatCycle)) 
-			{
-				poStateMachine.transitionTo(stateCoolDown);
-			}
-			else
-			{
-				Serial1.println("Invalid");			
-			}		
-        }
+		Serial1.println("Exit");			
+		if(poStateMachine.isInState(stateHeatCycle)) 
+		{
+			poStateMachine.transitionTo(stateCoolDown);
+		}
+		else
+		{
+			Serial1.println("Invalid");			
+		}		
         break;
 
-      case 'n':	// Test input integer parameter and set test temperature
-        {
-			Serial1.println("input n test");
-			inputValue = GetInputValue();
-			Serial1.println(inputValue);
-			testTemp = (double) inputValue;			
-        }
+      case 'o':	// Test input integer parameter and set test temperature
+		Serial1.println("input n test");
+		inputValue = GetInputValue();
+		Serial1.println(inputValue);
+		testTemp = (double) inputValue;
+        break;
+        
+      case 'l':	// Set Lower Set Point Parameter 
+		Serial1.println("Set Lower Set Point Parameter");
+		if(ble_available() > 2)
+		{
+		    cmd = ble_read();
+			Serial1.write(cmd);
+			
+			switch(cmd)
+			{
+			case '1' :
+				heaterParmsUpperFront.tempSetPointLowOn = GetInputValue();
+				break;
+			case '2' :
+				heaterParmsUpperRear.tempSetPointLowOn = GetInputValue();
+				break;    			
+			case '3' :
+				heaterParmsLowerFront.tempSetPointLowOn = GetInputValue();
+				break;    	    			
+			case '4' :
+				heaterParmsLowerRear.tempSetPointLowOn = GetInputValue();
+				break;      			
+			default :  
+				;  			
+			}
+		}
+        break;
+
+      case 'u':	// Set Upper Set Point Parameter 
+		Serial1.println("Set Upper Set Point Parameter");
+		if(ble_available() > 2)
+		{
+		    cmd = ble_read();
+			Serial1.write(cmd);
+			
+			switch(cmd)
+			{
+			case '1' :
+				heaterParmsUpperFront.tempSetPointHighOff = GetInputValue();
+				break;
+			case '2' :
+				heaterParmsUpperRear.tempSetPointHighOff = GetInputValue();
+				break;    			
+			case '3' :
+				heaterParmsLowerFront.tempSetPointHighOff = GetInputValue();
+				break;    	    			
+			case '4' :
+				heaterParmsLowerRear.tempSetPointHighOff = GetInputValue();
+				break;      			
+			default :  
+				;  			
+			}
+		}
+        break;
+
+      case 'n':	// Set On Percent Parameter 
+		Serial1.println("Set Upper Set Point Parameter");
+		if(ble_available() > 2)
+		{
+		    cmd = ble_read();
+			Serial1.write(cmd);
+			
+			switch(cmd)
+			{
+			case '1' :
+				heaterParmsUpperFront.onPercent = GetInputValue();
+				break;
+			case '2' :
+				heaterParmsUpperRear.onPercent = GetInputValue();
+				break;    			
+			case '3' :
+				heaterParmsLowerFront.onPercent = GetInputValue();
+				break;    	    			
+			case '4' :
+				heaterParmsLowerRear.onPercent = GetInputValue();
+				break;      			
+			default :  
+				;  			
+			}
+		}
+        break;
+
+      case 'f':	// Set Off Percent Parameter 
+		Serial1.println("Set Upper Set Point Parameter");
+		if(ble_available() > 2)
+		{
+		    cmd = ble_read();
+			Serial1.write(cmd);
+			
+			switch(cmd)
+			{
+			case '1' :
+				heaterParmsUpperFront.offPercent = GetInputValue();
+				break;
+			case '2' :
+				heaterParmsUpperRear.offPercent = GetInputValue();
+				break;    			
+			case '3' :
+				heaterParmsLowerFront.offPercent = GetInputValue();
+				break;    	    			
+			case '4' :
+				heaterParmsLowerRear.offPercent = GetInputValue();
+				break;      			
+			default :  
+				;  			
+			}
+		}
         break;
         
 	  default:	
@@ -545,7 +700,6 @@ void loop()
     buf_len = 0;
 }
 
-#if 1
 bool CharValidDigit(unsigned char digit)
 {
 	if((digit >= '0') && (digit <= '9'))
@@ -590,7 +744,7 @@ uint16_t GetInputValue()
 	}
 	return inputValue;
 }
-#endif
+
 //------------------------------------------
 //state machine stateStandby 
 //------------------------------------------
@@ -698,7 +852,10 @@ double getTempThermocouple(uint8_t sensor)
 {
 	double degreesC = 0.0;
 	uint16_t degreesCx10;
-	
+
+#ifdef DEBUG_INPUT_TEMP	
+	degreesC = testTemp;
+#else	
 	switch(sensor)
 	{
 	case 0:
@@ -727,16 +884,18 @@ double getTempThermocouple(uint8_t sensor)
   	default:
   	    Serial1.print("Invalid tc!");
 	}
-    
+#endif
+
+#if 0    
     if (isnan(degreesC)) {
       Serial1.println("Error!");
     } else {
-//    	Serial1.println(degreesC);	
+   	Serial1.println(degreesC);	
     	degreesCx10 = (uint16_t) (degreesC + 0.05) * 10.0;
 // 		ble_write_string(degreesCx10);   	
 //    	ble_write_string((byte *)&degreesCx10, 4);  // send as a binary temp * 10
     }
-    
+#endif    
 	return degreesC;
 };		
 	
