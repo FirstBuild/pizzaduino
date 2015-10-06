@@ -34,12 +34,12 @@
 //------------------------------------------
 // Macros
 //------------------------------------------
-#define PROTOCOL_MAJOR_VERSION   0 //
-#define PROTOCOL_MINOR_VERSION   1 //
-#define PROTOCOL_BUGFIX_VERSION  0 // bugfix
+#define PROTOCOL_MAJOR_VERSION   0
+#define PROTOCOL_MINOR_VERSION   23
+#define PROTOCOL_BUGFIX_VERSION  0
 
-// If defined inputs temperatures from Blue Tooth 'n' command
-#define DEBUG_INPUT_TEMP
+// If defined inputs temperatures from Blue Tooth test command
+//#define DEBUG_INPUT_TEMP
 
 //------------------------------------------
 // Constants
@@ -73,10 +73,32 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_FRONT		(11)
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
-// Timer1 Used to keep track of 4 second heat control cycles
-#define TIMER1_PERIOD_MICRO_SEC			(100000)	// 100 ms interval to start
+// Timer1 Used to keep track of heat control cycles
+#define TIMER1_PERIOD_MICRO_SEC			(10000) 	// 10 mSec interval
 #define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
-#define TIMER1_COUNTER_WRAP				(600)        // Count down to a period of 4 seconds
+#define TIMER1_COUNTER_WRAP				(100)      // Count down for a period of 1 second
+#define TIMER1_OUTPUT_TEMP_PERIODIC     (200)       // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
+
+//------------------------------------------
+//state machine setup 
+//------------------------------------------
+void stateStandbyEnter();
+void stateStandbyUpdate();
+void stateStandbyExit();
+
+void stateHeatCycleEnter();
+void stateHeatCycleUpdate();
+void stateHeatCycleUpdate();
+
+void stateCoolDownEnter();
+void stateCoolDownUpdate();
+void stateCoolDownExit();
+
+State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
+State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
+State stateCoolDown = State(stateCoolDownEnter, 
+	stateCoolDownUpdate, stateCoolDownExit);
+FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
 
 //------------------------------------------
 // Software SPI Thermocouple Definitions
@@ -86,8 +108,6 @@ Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPE
 Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_REAR, SW_SPI_THERMO_DO);
 
-
-
 //------------------------------------------
 // Global Definitions
 //------------------------------------------
@@ -95,6 +115,10 @@ Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWE
 // Timer one is running to control heat percentage and start
 //  Re-synchronized on the start of heating
 volatile uint16_t timer1Counter = 0;
+uint16_t countOutputTempPeriodic = 0;
+
+// Heater cycle time in multiples of 1 minute
+uint16_t nTimesCycleTime = 4;
 
 double testTemp;
 
@@ -107,17 +131,10 @@ struct HeaterParameters
 	uint16_t offPercent;      // Time when a heater turns off in a 4 second cycle in percent
 };
 
-#if 0
-HeaterParameters heaterParmsUpperFront = {true, 700, 800,   0, 64};
-HeaterParameters heaterParmsUpperRear  = {true, 500, 600,   0, 71};
-HeaterParameters heaterParmsLowerFront = {true, 300, 400,   0, 33};
-HeaterParameters heaterParmsLowerRear  = {true, 100, 200,  50, 90};
-#else
-HeaterParameters heaterParmsUpperFront = {true, 701, 802,   3, 104};
-HeaterParameters heaterParmsUpperRear  = {true, 505, 606,   7, 108};
-HeaterParameters heaterParmsLowerFront = {true, 310, 420,   30, 140};
-HeaterParameters heaterParmsLowerRear  = {true, 150, 260,   70, 180};
-#endif
+HeaterParameters heaterParmsUpperFront = {true, 100, 150,   0, 64};
+HeaterParameters heaterParmsUpperRear  = {true, 100, 150,   0, 71};
+HeaterParameters heaterParmsLowerFront = {true, 100, 150,   0, 33};
+HeaterParameters heaterParmsLowerRear  = {true, 100, 150,  50, 90};
 
 uint16_t heaterCountsOnUpperFront;
 uint16_t heaterCountsOffUpperFront;
@@ -140,25 +157,42 @@ bool heaterCoolDownStateUpperRear  = false;
 bool heaterCoolDownStateLowerFront = false;
 bool heaterCoolDownStateLowerRear  = false;
 
+bool outputTempPeriodic = false;
+
+//------------------------------------------
+// Prototypes
+//------------------------------------------
+void ConvertHeaterPercentCounts();
+void UpdateHeaterHardware();
+void AllHeatersOffStateClear();
+void UpdateHeatControlUpperFront(uint16_t currentCounterTimer);
+void UpdateHeatControlUpperRear(uint16_t currentCounterTimer);
+void UpdateHeatControlLowerFront(uint16_t currentCounterTimer);
+void UpdateHeatControlLowerRear(uint16_t currentCounterTimer);
+void PeriodicOutputTemps();
+bool CharValidDigit(unsigned char digit);
+uint16_t GetInputValue();
+void HeaterTimerInterrupt(void);
+double getTempThermocouple(uint8_t sensor);
+void ble_write_string(byte *bytes, uint8_t len);
+
 //------------------------------------------
 // Code
 //------------------------------------------
 
 void ConvertHeaterPercentCounts()
 {
-	// TBD add round up so can have a 0 to 100% without turning off
-	Serial1.println("counts");
-	heaterCountsOnUpperFront  = (uint16_t)(((uint32_t) heaterParmsUpperFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100);
-	heaterCountsOffUpperFront = (uint16_t)(((uint32_t) heaterParmsUpperFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100);
+	heaterCountsOnUpperFront  = (uint16_t)(((uint32_t)heaterParmsUpperFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+	heaterCountsOffUpperFront = (uint16_t)(((uint32_t)heaterParmsUpperFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
     
-	heaterCountsOnUpperRear   = (uint16_t)(((uint32_t) heaterParmsUpperRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100);
-	heaterCountsOffUpperRear  = (uint16_t)(((uint32_t) heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100);	
+	heaterCountsOnUpperRear   = (uint16_t)(((uint32_t)heaterParmsUpperRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+	heaterCountsOffUpperRear  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;	
     
-	heaterCountsOnLowerFront  = (uint16_t)(((uint32_t) heaterParmsLowerFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100);
-	heaterCountsOffLowerFront = (uint16_t)(((uint32_t) heaterParmsLowerFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100);
+	heaterCountsOnLowerFront  = (uint16_t)(((uint32_t)heaterParmsLowerFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+	heaterCountsOffLowerFront = (uint16_t)(((uint32_t)heaterParmsLowerFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
 	
-	heaterCountsOnLowerRear   = (uint16_t)(((uint32_t) heaterParmsLowerRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100);
-	heaterCountsOffLowerRear  = (uint16_t)(((uint32_t) heaterParmsLowerRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100);
+	heaterCountsOnLowerRear   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+	heaterCountsOffLowerRear  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
 }
 
 void UpdateHeaterHardware()
@@ -198,6 +232,14 @@ void AllHeatersOffStateClear()
 	
 	UpdateHeaterHardware();
 }
+
+void CoolingFanControl(boolean control)
+{
+	if(control == true)
+  		digitalWrite(COOLING_FAN_SIGNAL, HIGH);	
+	else
+  		digitalWrite(COOLING_FAN_SIGNAL, LOW);	
+}		
 
 void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 {	
@@ -394,15 +436,24 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
 //    Serial1.println("LRc");
 //    Serial1.println(icase);
 }
-//------------------------------------------
-//state machine setup 
-//------------------------------------------
-State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
-State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
-State stateCoolDown = State(stateCoolDownEnter, 
-	stateCoolDownUpdate, stateCoolDownExit);
-FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
+
+void PeriodicOutputTemps()
+{
+	uint8_t strLen;
+	char formatStr[25];
+    uint16_t tempCUF, tempCUR, tempCLF, tempCLR;
+
+	tempCUF = (uint16_t) (getTempThermocouple(zoneUpperFront) * 10);
+	tempCUR = (uint16_t) (getTempThermocouple(zoneUpperRear) * 10);
+	tempCLF = (uint16_t) (getTempThermocouple(zoneLowerFront) * 10);
+	tempCLR = (uint16_t) (getTempThermocouple(zoneLowerRear) * 10);
  
+    strLen = sprintf(formatStr,"Temps %d %d %d %d\n", 
+		tempCUF, tempCUR, tempCLF, tempCLR);
+    if(strLen>0)
+    	ble_write_string((byte *)&formatStr, strLen);
+}
+
 //------------------------------------------
 // Setup Routines
 //------------------------------------------
@@ -439,7 +490,7 @@ void setup()
   //ble_set_pins(3, 2);
   
   // Set your BLE Shield name here, max. length 10
-  //ble_set_name("My Name");
+  ble_set_name("Pizza Oven");
   
   // Init. and start BLE library.
   ble_begin();
@@ -451,40 +502,37 @@ void setup()
 // Update Heater State Interrupt
 //------------------------------------------
 void HeaterTimerInterrupt(void)
-{
-//	ble_write_string((byte *)"I", 1);  
+{  
 	timer1Counter++;
 
-  if(timer1Counter > TIMER1_COUNTER_WRAP)
-  {
-  	timer1Counter = 0;
-  }
+	if(timer1Counter > (TIMER1_COUNTER_WRAP * nTimesCycleTime))
+  	{
+  		timer1Counter = 0;
+  	}
 
-//	ble_write_string(timer1Counter); 
+	countOutputTempPeriodic++;
+	
+	if(countOutputTempPeriodic >= TIMER1_OUTPUT_TEMP_PERIODIC)
+	{
+  		countOutputTempPeriodic = 0;
+		outputTempPeriodic = true;
+	}
 }
 
-static byte buf_len = 0;
 //------------------------------------------
 // Main Loop
 //------------------------------------------
+static byte buf_len = 0;
 byte queryDone = false;
 uint32_t liveCount = 0;
 uint16_t inputValue;
+uint16_t tempMultiply, tempPercent, tempTemp;
 
 void loop()
 {
-byte buf[] = {'V', 'a', 'b', 'c'};
-char formatStr[25];
-uint16_t strLen;
+	char formatStr[25];
+	uint16_t strLen;
 
-#if 0
-  liveCount++;
-  if((liveCount % 100000) == 0) {
-//     Serial1.println("^");
-//    ble_write_string((byte *)'A', 1);
-  }
-#endif
-     
   // Process Blue Tooth Command if available
   // TBD ble_available returns -1 if nothing available
   if(ble_available() > 0)
@@ -511,6 +559,10 @@ uint16_t strLen;
 			
 			switch(cmd)
 			{
+			case '0' :			
+          		strLen = sprintf(formatStr,"nTimes %u\n", 
+					nTimesCycleTime);
+				break;    
 			case '1' :			
           		strLen = sprintf(formatStr,"UF %u %u %u %u\n", 
 					heaterParmsUpperFront.tempSetPointLowOn, heaterParmsUpperFront.tempSetPointHighOff,
@@ -535,20 +587,11 @@ uint16_t strLen;
 				;
 			}			 				    
    
-          if(strLen>0)
-            ble_write_string((byte *)&formatStr, strLen);
+           if(strLen>0)
+             ble_write_string((byte *)&formatStr, strLen);
         }    	
 	    break;
             
-      case 't': // Test Thermistors
-        Serial1.println("Tc");
-    	double tempC;
-		tempC = getTempThermocouple(zoneUpperFront);
-		tempC = getTempThermocouple(zoneUpperRear);
-		tempC = getTempThermocouple(zoneLowerFront);
-		tempC = getTempThermocouple(zoneLowerRear);
-        break;
-        
       case 's':	// Start Pizza Oven Cycle			
 		Serial1.println("Start");
 		if(poStateMachine.isInState(stateStandby) || 
@@ -562,7 +605,7 @@ uint16_t strLen;
 		}	
         break;
 
-      case 'q':	// Exit Pizza Oven Cycle
+      case 'q':	// Quit Pizza Oven Cycle
 		Serial1.println("Exit");			
 		if(poStateMachine.isInState(stateHeatCycle)) 
 		{
@@ -588,6 +631,7 @@ uint16_t strLen;
 		    cmd = ble_read();
 			Serial1.write(cmd);
 			
+			// TBD Validate Range
 			switch(cmd)
 			{
 			case '1' :
@@ -615,6 +659,7 @@ uint16_t strLen;
 		    cmd = ble_read();
 			Serial1.write(cmd);
 			
+			// TBD Validate Range
 			switch(cmd)
 			{
 			case '1' :
@@ -636,12 +681,13 @@ uint16_t strLen;
         break;
 
       case 'n':	// Set On Percent Parameter 
-		Serial1.println("Set Upper Set Point Parameter");
+		Serial1.println("Set On Percent Parameter");
 		if(ble_available() > 2)
 		{
 		    cmd = ble_read();
 			Serial1.write(cmd);
 			
+			// TBD Validate Range
 			switch(cmd)
 			{
 			case '1' :
@@ -663,12 +709,13 @@ uint16_t strLen;
         break;
 
       case 'f':	// Set Off Percent Parameter 
-		Serial1.println("Set Upper Set Point Parameter");
+		Serial1.println("Set Off Percent Parameter");
 		if(ble_available() > 2)
 		{
 		    cmd = ble_read();
 			Serial1.write(cmd);
 			
+			// TBD Validate Range
 			switch(cmd)
 			{
 			case '1' :
@@ -688,13 +735,41 @@ uint16_t strLen;
 			}
 		}
         break;
+    
+      case 't':	// Set Time Multiplier Minutes
+      	if(poStateMachine.isInState(stateStandby) || 
+			poStateMachine.isInState(stateCoolDown))
+		{
+			Serial1.println("Set Time Period Cycle Seconds");
+			if(ble_available() >= 1)
+			{
+				tempMultiply = GetInputValue();
+				if((tempMultiply > 0) && (tempMultiply <= 9))
+				{
+					nTimesCycleTime = tempMultiply;
+					ConvertHeaterPercentCounts();
+				}	 				
+				else
+				{	 
+		    		ble_write_string((byte *)"Invalid n", 9);
+		    		Serial1.println("Invalid n");
+		    	}
+	    	}			
+	    }
+	    else
+		{	 
+    		ble_write_string((byte *)"Invalid Heat", 12);
+    		Serial1.println("Invalid Heat");
+    	}			
+		break;		   
         
 	  default:	
 		;	
-    }	  
- }
- 	poStateMachine.update();
+    	}	  
+ 	}
  	
+ 	poStateMachine.update();
+	
  	// send out any outstanding data
     ble_do_events();
     buf_len = 0;
@@ -757,8 +832,8 @@ void stateStandbyEnter()
 
 void stateStandbyUpdate()
 {
-  if((liveCount % 100000) == 0) 
-     Serial1.println("SU");
+//  if((liveCount % 100000) == 0) 
+//     Serial1.println("SU");
 }
 
 void stateStandbyExit()
@@ -803,6 +878,13 @@ void stateHeatCycleUpdate()
     	UpdateHeaterHardware();   	
     	lastTimer1Counter = saveTimer1Counter;	
     }  
+    
+	// Output Periodic Temperatures
+    if(true == outputTempPeriodic)
+	{
+		outputTempPeriodic = false;
+		PeriodicOutputTemps();	
+	}
 }
 
 void stateHeatCycleExit()
@@ -824,8 +906,8 @@ void stateCoolDownEnter()
 
 void stateCoolDownUpdate()
 {
-    if((liveCount % 100000) == 0) 
-      Serial1.println("CU");
+//    if((liveCount % 100000) == 0) 
+//      Serial1.println("CU");
     // when reach ? set temperature on ?  
 }
 
@@ -833,17 +915,6 @@ void stateCoolDownExit()
 {
 	     Serial1.println("CX");
 }
-
-//------------------------------------------
-// Cooling Fan Control
-//------------------------------------------
-void CoolingFanControl(boolean control)
-{
-	if(control == true)
-  		digitalWrite(COOLING_FAN_SIGNAL, HIGH);	
-	else
-  		digitalWrite(COOLING_FAN_SIGNAL, LOW);	
-}		
 
 //------------------------------------------
 // Get Thermistor Temperatures For Passed Sensor
@@ -906,8 +977,8 @@ void ble_write_string(byte *bytes, uint8_t len)
 {
   if (buf_len + len > 20)
   {
-	// TBD the count of 15000 need to be reduce, from reference codes
-    for (int j = 0; j < 15000; j++)
+	// Event counts reduced from 15000 from reference code
+    for (int j = 0; j < 1500; j++)
       ble_do_events();
     
     buf_len = 0;
@@ -921,7 +992,7 @@ void ble_write_string(byte *bytes, uint8_t len)
     
   if (buf_len == 20)
   {
-    for (int j = 0; j < 15000; j++)
+    for (int j = 0; j < 1500; j++)
       ble_do_events();
     
     buf_len = 0;
