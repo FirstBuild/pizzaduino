@@ -35,20 +35,11 @@
 // Macros
 //------------------------------------------
 #define PROTOCOL_MAJOR_VERSION   0
-#define PROTOCOL_MINOR_VERSION   23
+#define PROTOCOL_MINOR_VERSION   11
 #define PROTOCOL_BUGFIX_VERSION  0
 
 // If defined inputs temperatures from Blue Tooth test command
 //#define DEBUG_INPUT_TEMP
-
-//------------------------------------------
-// Constants
-//------------------------------------------
-
-static const uint8_t zoneUpperFront = 1;
-static const uint8_t zoneUpperRear  = 2;
-static const uint8_t zoneLowerFront = 3;
-static const uint8_t zoneLowerRear  = 4;
 
 //------------------------------------------
 // Pin Definitions
@@ -74,7 +65,7 @@ static const uint8_t zoneLowerRear  = 4;
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
 // Timer1 Used to keep track of heat control cycles
-#define TIMER1_PERIOD_MICRO_SEC			(10000) 	// 10 mSec interval
+#define TIMER1_PERIOD_MICRO_SEC			(10000) 	// timer1 10 mSec interval 
 #define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
 #define TIMER1_COUNTER_WRAP				(100)      // Count down for a period of 1 second
 #define TIMER1_OUTPUT_TEMP_PERIODIC     (200)       // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
@@ -88,7 +79,7 @@ void stateStandbyExit();
 
 void stateHeatCycleEnter();
 void stateHeatCycleUpdate();
-void stateHeatCycleUpdate();
+void stateHeatCycleExit();
 
 void stateCoolDownEnter();
 void stateCoolDownUpdate();
@@ -127,14 +118,14 @@ struct HeaterParameters
 	boolean enabled;
 	uint16_t tempSetPointLowOn;   // In integer degrees C
 	uint16_t tempSetPointHighOff; // "      "
-	uint16_t onPercent;       // Time when a heater turns on in a 4 second cycle in percent
-	uint16_t offPercent;      // Time when a heater turns off in a 4 second cycle in percent
+	uint16_t onPercent;       // Time when a heater turns on in percent
+	uint16_t offPercent;      // Time when a heater turns off in percent
 };
 
-HeaterParameters heaterParmsUpperFront = {true, 100, 150,   0, 64};
-HeaterParameters heaterParmsUpperRear  = {true, 100, 150,   0, 71};
-HeaterParameters heaterParmsLowerFront = {true, 100, 150,   0, 33};
-HeaterParameters heaterParmsLowerRear  = {true, 100, 150,  50, 90};
+HeaterParameters heaterParmsUpperFront = {true, 500, 550,   0, 64};
+HeaterParameters heaterParmsUpperRear  = {true, 500, 550,   0, 71};
+HeaterParameters heaterParmsLowerFront = {true, 500, 550,   0, 33};
+HeaterParameters heaterParmsLowerRear  = {true, 500, 550,  50, 90};
 
 uint16_t heaterCountsOnUpperFront;
 uint16_t heaterCountsOffUpperFront;
@@ -157,7 +148,7 @@ bool heaterCoolDownStateUpperRear  = false;
 bool heaterCoolDownStateLowerFront = false;
 bool heaterCoolDownStateLowerRear  = false;
 
-bool outputTempPeriodic = false;
+volatile bool outputTempPeriodic = false;
 
 //------------------------------------------
 // Prototypes
@@ -173,7 +164,6 @@ void PeriodicOutputTemps();
 bool CharValidDigit(unsigned char digit);
 uint16_t GetInputValue();
 void HeaterTimerInterrupt(void);
-double getTempThermocouple(uint8_t sensor);
 void ble_write_string(byte *bytes, uint8_t len);
 
 //------------------------------------------
@@ -251,8 +241,18 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnUpperFront) &&
 	   (currentCounterTimer <= heaterCountsOffUpperFront))
 	{   
-			tempC = getTempThermocouple(zoneUpperFront); 
-		
+			tempC = thermocoupleUpperFront.readCelsius();
+			 
+			if (isnan(tempC)) {
+      	        ble_write_string((byte *)"#uf", 3);
+      			return;
+    		}
+    		
+			if (tempC == 0.0) {
+      	        ble_write_string((byte *)"zuf", 3);
+      			return;
+    		}
+    							
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateUpperFront == false) && (tempC < (double)heaterParmsUpperFront.tempSetPointHighOff))
 			{
@@ -286,8 +286,8 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 			heaterHardwareStateUpperFront = false;
 	}
 	
-//    Serial1.println("UFc");
-//    Serial1.println(icase);
+//    Serial1.print("UFc");
+//    Serial1.print(icase);
 }
 
 void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
@@ -299,9 +299,19 @@ void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
 	if((heaterParmsUpperRear.enabled == true) &&
 	   (currentCounterTimer >= heaterCountsOnUpperRear) &&
 	   (currentCounterTimer <= heaterCountsOffUpperRear))
-	{   
-			tempC = getTempThermocouple(zoneUpperRear); 
-		
+	{ 			  
+			tempC = thermocoupleUpperRear.readCelsius();
+			
+			if (isnan(tempC)) {
+      	        ble_write_string((byte *)"#ur", 3);      			     			
+      			return;
+    		}
+
+			if (tempC == 0.0) {
+      	        ble_write_string((byte *)"zur", 3);
+      			return;
+    		}
+
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateUpperRear == false) && (tempC < (double)heaterParmsUpperRear.tempSetPointHighOff))
 			{
@@ -349,7 +359,17 @@ void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnLowerFront) &&
 	   (currentCounterTimer <= heaterCountsOffLowerFront))
 	{   
-			tempC = getTempThermocouple(zoneLowerFront); 
+			tempC = thermocoupleLowerFront.readCelsius();
+			
+			if (isnan(tempC)) {
+      	        ble_write_string((byte *)"#lf", 3);      			     			
+      			return;
+    		}
+
+			if (tempC == 0.0) {
+      	        ble_write_string((byte *)"zlf", 3);
+      			return;
+    		}
 			
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateLowerFront == false) && (tempC < (double)heaterParmsLowerFront.tempSetPointHighOff))
@@ -397,9 +417,19 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
 	if((heaterParmsLowerRear.enabled == true) &&
 	   (currentCounterTimer >= heaterCountsOnLowerRear) &&
 	   (currentCounterTimer <= heaterCountsOffLowerRear))
-	{   
-			tempC = getTempThermocouple(zoneLowerRear); 
-			
+ 	{
+			tempC = thermocoupleLowerRear.readCelsius();
+			   
+			if (isnan(tempC)) {
+      	        ble_write_string((byte *)"#lr", 3);      			     			
+      			return;
+    		}
+
+			if (tempC == 0.0) {
+      	        ble_write_string((byte *)"zlr", 3);
+      			return;
+    		}
+    										
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateLowerRear == false) && (tempC < (double)heaterParmsLowerRear.tempSetPointHighOff))
 			{
@@ -441,15 +471,15 @@ void PeriodicOutputTemps()
 {
 	uint8_t strLen;
 	char formatStr[25];
-    uint16_t tempCUF, tempCUR, tempCLF, tempCLR;
+    uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
 
-	tempCUF = (uint16_t) (getTempThermocouple(zoneUpperFront) * 10);
-	tempCUR = (uint16_t) (getTempThermocouple(zoneUpperRear) * 10);
-	tempCLF = (uint16_t) (getTempThermocouple(zoneLowerFront) * 10);
-	tempCLR = (uint16_t) (getTempThermocouple(zoneLowerRear) * 10);
+ 	intTempCUF = (uint16_t) (thermocoupleUpperFront.readCelsius() * 10);
+	intTempCUR = (uint16_t) (thermocoupleUpperRear.readCelsius()  * 10);
+	intTempCLF = (uint16_t) (thermocoupleLowerFront.readCelsius() * 10);
+	intTempCLR = (uint16_t) (thermocoupleLowerRear.readCelsius()  * 10);
  
     strLen = sprintf(formatStr,"Temps %d %d %d %d\n", 
-		tempCUF, tempCUR, tempCLF, tempCLR);
+		intTempCUF, intTempCUR, intTempCLF, intTempCLR);
     if(strLen>0)
     	ble_write_string((byte *)&formatStr, strLen);
 }
@@ -744,7 +774,7 @@ void loop()
 			if(ble_available() >= 1)
 			{
 				tempMultiply = GetInputValue();
-				if((tempMultiply > 0) && (tempMultiply <= 9))
+				if((tempMultiply > 0) && (tempMultiply <= 30))
 				{
 					nTimesCycleTime = tempMultiply;
 					ConvertHeaterPercentCounts();
@@ -858,7 +888,7 @@ void stateHeatCycleEnter()
 }
 
 void stateHeatCycleUpdate()
-{
+{	  
 //    if((liveCount % 100) == 0) 
 //      Serial1.println("HU");
     
@@ -869,22 +899,24 @@ void stateHeatCycleUpdate()
     
     if(saveTimer1Counter != lastTimer1Counter)
     {
-//		Serial1.println(saveTimer1Counter);
-//		Serial1.println(lastTimer1Counter);;    
     	UpdateHeatControlUpperFront(saveTimer1Counter);
-    	UpdateHeatControlUpperRear(saveTimer1Counter); 
+    	UpdateHeatControlUpperRear(saveTimer1Counter);
     	UpdateHeatControlLowerFront(saveTimer1Counter);
     	UpdateHeatControlLowerRear(saveTimer1Counter);
+
     	UpdateHeaterHardware();   	
+
     	lastTimer1Counter = saveTimer1Counter;	
     }  
-    
+
+#if 1   
 	// Output Periodic Temperatures
     if(true == outputTempPeriodic)
 	{
 		outputTempPeriodic = false;
 		PeriodicOutputTemps();	
 	}
+#endif	
 }
 
 void stateHeatCycleExit()
@@ -917,60 +949,6 @@ void stateCoolDownExit()
 }
 
 //------------------------------------------
-// Get Thermistor Temperatures For Passed Sensor
-//------------------------------------------
-double getTempThermocouple(uint8_t sensor) 
-{
-	double degreesC = 0.0;
-	uint16_t degreesCx10;
-
-#ifdef DEBUG_INPUT_TEMP	
-	degreesC = testTemp;
-#else	
-	switch(sensor)
-	{
-	case 0:
-		degreesC = testTemp;
-		break;
-	case zoneUpperFront:
-		degreesC = thermocoupleUpperFront.readCelsius();
-		Serial1.print("tempUF");
-//		ble_write_string((byte *)"UF", 4);
-		break;
-  	case zoneUpperRear:
-  		degreesC = thermocoupleUpperRear.readCelsius();
-  		Serial1.print("tempUR");
-//  		ble_write_string((byte *)"UR", 4);
-  		break;
-  	case zoneLowerFront:
-  		degreesC = thermocoupleLowerFront.readCelsius();
-  		Serial1.print("tempLF");
-//  		ble_write_string((byte *)"LF", 4);
-  		break;
-  	case zoneLowerRear:
- 		degreesC = thermocoupleLowerRear.readCelsius();
-  		Serial1.print("tempLR");
-//  		ble_write_string((byte *)"LR", 4);  		
-  		break;
-  	default:
-  	    Serial1.print("Invalid tc!");
-	}
-#endif
-
-#if 0    
-    if (isnan(degreesC)) {
-      Serial1.println("Error!");
-    } else {
-   	Serial1.println(degreesC);	
-    	degreesCx10 = (uint16_t) (degreesC + 0.05) * 10.0;
-// 		ble_write_string(degreesCx10);   	
-//    	ble_write_string((byte *)&degreesCx10, 4);  // send as a binary temp * 10
-    }
-#endif    
-	return degreesC;
-};		
-	
-//------------------------------------------
 // Bluetooth Write String Routines
 //------------------------------------------
 void ble_write_string(byte *bytes, uint8_t len)
@@ -978,7 +956,7 @@ void ble_write_string(byte *bytes, uint8_t len)
   if (buf_len + len > 20)
   {
 	// Event counts reduced from 15000 from reference code
-    for (int j = 0; j < 1500; j++)
+    for (int j = 0; j < 100; j++)
       ble_do_events();
     
     buf_len = 0;
@@ -992,7 +970,7 @@ void ble_write_string(byte *bytes, uint8_t len)
     
   if (buf_len == 20)
   {
-    for (int j = 0; j < 1500; j++)
+    for (int j = 0; j < 100; j++)
       ble_do_events();
     
     buf_len = 0;
