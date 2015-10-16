@@ -35,26 +35,42 @@
 // Macros
 //------------------------------------------
 #define PROTOCOL_MAJOR_VERSION   0
-#define PROTOCOL_MINOR_VERSION   11
+#define PROTOCOL_MINOR_VERSION   778
 #define PROTOCOL_BUGFIX_VERSION  0
 
 // If defined inputs temperatures from Blue Tooth test command
 //#define DEBUG_INPUT_TEMP
 
+// If defined Theromocouple inputs are from Analog 
+// Adafruit Analog Output K-Type Thermocouple Amplifier - AD8495
+// otherwise from
+// Adafruit SPI Output Thermocouple Amplifier MAX31855  
+#define THERMOCOUPLE_ANALOG_INPUT 
 //------------------------------------------
 // Pin Definitions
 //------------------------------------------
 
 #define COOLING_FAN_SIGNAL 				(A0)
 
-// TBD HW Pin Defs Out of Order and need to be checked.
-// Thermocouple Pin Definitions
+// Thermocouple Definitions
+#ifdef THERMOCOUPLE_ANALOG_INPUT
+#define ANALOG_REFERENCE_VOLTAGE		((double)3.3)
+
+#define ANALOG_THERMO_UPPER_FRONT		(A0)
+#define ANALOG_THERMO_UPPER_REAR		(A1)
+#define ANALOG_THERMO_LOWER_FRONT		(A2)
+#define ANALOG_THERMO_LOWER_REAR		(A3)
+#define ANALOG_THERMO_FAN				(A4)
+#else
+#define MAX_TEMP_READ_RETRY (10)
+
 #define SW_SPI_THERMO_DO                (A4)
 #define SW_SPI_THERMO_CLK               (A5)
 #define SW_SPI_THERMO_CS_UPPER_FRONT	(8)
 #define SW_SPI_THERMO_CS_UPPER_REAR		(5)
 #define SW_SPI_THERMO_CS_LOWER_FRONT	(3)
 #define SW_SPI_THERMO_CS_LOWER_REAR		(2)
+#endif
 
 // TBD Fan Temp TC5 on Reset?
 
@@ -94,10 +110,12 @@ FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in
 //------------------------------------------
 // Software SPI Thermocouple Definitions
 //------------------------------------------
+#ifndef THERMOCOUPLE_ANALOG_INPUT
 Adafruit_MAX31855 thermocoupleUpperFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_REAR, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
 Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_REAR, SW_SPI_THERMO_DO);
+#endif
 
 //------------------------------------------
 // Global Definitions
@@ -122,10 +140,10 @@ struct HeaterParameters
 	uint16_t offPercent;      // Time when a heater turns off in percent
 };
 
-HeaterParameters heaterParmsUpperFront = {true, 500, 550,   0, 64};
-HeaterParameters heaterParmsUpperRear  = {true, 500, 550,   0, 71};
-HeaterParameters heaterParmsLowerFront = {true, 500, 550,   0, 33};
-HeaterParameters heaterParmsLowerRear  = {true, 500, 550,  50, 90};
+HeaterParameters heaterParmsUpperFront = {false, 100, 125,   0, 64};
+HeaterParameters heaterParmsUpperRear  = {true, 100, 150,   0, 100};
+HeaterParameters heaterParmsLowerFront = {false, 100, 125,   0, 100};
+HeaterParameters heaterParmsLowerRear  = {false, 100, 125,  50, 90};
 
 uint16_t heaterCountsOnUpperFront;
 uint16_t heaterCountsOffUpperFront;
@@ -231,6 +249,78 @@ void CoolingFanControl(boolean control)
   		digitalWrite(COOLING_FAN_SIGNAL, LOW);	
 }		
 
+#ifdef THERMOCOUPLE_ANALOG_INPUT
+double AnalogThermocoupleTemp(uint16_t rawA2D)
+{
+	double analogVoltage;
+	double tempC;
+	
+	analogVoltage = (float)rawA2D * ANALOG_REFERENCE_VOLTAGE / 1023.0;
+	tempC = (analogVoltage - 1.25)  / 0.005;  
+	return tempC;
+}
+
+double InputThermocoupleUpperFront()
+{
+	double tempC;
+	
+	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_UPPER_FRONT));
+	return tempC;
+}
+
+double InputThermocoupleUpperRear()
+{
+	double tempC;
+	
+	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_UPPER_REAR));
+	return tempC;
+}
+
+double InputThermocoupleLowerFront()
+{
+	double tempC;
+	
+	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_LOWER_FRONT));
+	return tempC;
+}
+
+double InputThermocoupleLowerRear()
+{
+	double tempC;
+	
+	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_LOWER_REAR));
+	return tempC;
+}
+
+double InputThermocoupleFan()
+{
+	double tempC;
+	
+	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_FAN));
+	return tempC;
+}
+#else
+double InputThermocoupleUpperFront()
+{
+	uint16_t retry;
+	double tempC;
+
+	for(int retry=0; retry <= MAX_TEMP_READ_RETRY; retry++)
+	{
+		tempC = thermocoupleLowerFront.readCelsius();
+		if(0 == isnan(tempC))
+		{
+			break;
+		}	
+	}	
+			
+	if (isnan(tempC)) {
+        ble_write_string((byte *)"#lf", 3);      			     			
+	}
+	return tempC;
+}
+#endif
+
 void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 {	
 	double tempC;
@@ -241,17 +331,7 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnUpperFront) &&
 	   (currentCounterTimer <= heaterCountsOffUpperFront))
 	{   
-			tempC = thermocoupleUpperFront.readCelsius();
-			 
-			if (isnan(tempC)) {
-      	        ble_write_string((byte *)"#uf", 3);
-      			return;
-    		}
-    		
-			if (tempC == 0.0) {
-      	        ble_write_string((byte *)"zuf", 3);
-      			return;
-    		}
+			tempC = InputThermocoupleUpperFront();
     							
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateUpperFront == false) && (tempC < (double)heaterParmsUpperFront.tempSetPointHighOff))
@@ -300,17 +380,7 @@ void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnUpperRear) &&
 	   (currentCounterTimer <= heaterCountsOffUpperRear))
 	{ 			  
-			tempC = thermocoupleUpperRear.readCelsius();
-			
-			if (isnan(tempC)) {
-      	        ble_write_string((byte *)"#ur", 3);      			     			
-      			return;
-    		}
-
-			if (tempC == 0.0) {
-      	        ble_write_string((byte *)"zur", 3);
-      			return;
-    		}
+			tempC = InputThermocoupleUpperRear();
 
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateUpperRear == false) && (tempC < (double)heaterParmsUpperRear.tempSetPointHighOff))
@@ -359,12 +429,7 @@ void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnLowerFront) &&
 	   (currentCounterTimer <= heaterCountsOffLowerFront))
 	{   
-			tempC = thermocoupleLowerFront.readCelsius();
-			
-			if (isnan(tempC)) {
-      	        ble_write_string((byte *)"#lf", 3);      			     			
-      			return;
-    		}
+			tempC = InputThermocoupleLowerFront();
 
 			if (tempC == 0.0) {
       	        ble_write_string((byte *)"zlf", 3);
@@ -418,17 +483,7 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
 	   (currentCounterTimer >= heaterCountsOnLowerRear) &&
 	   (currentCounterTimer <= heaterCountsOffLowerRear))
  	{
-			tempC = thermocoupleLowerRear.readCelsius();
-			   
-			if (isnan(tempC)) {
-      	        ble_write_string((byte *)"#lr", 3);      			     			
-      			return;
-    		}
-
-			if (tempC == 0.0) {
-      	        ble_write_string((byte *)"zlr", 3);
-      			return;
-    		}
+			tempC = InputThermocoupleLowerRear();
     										
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateLowerRear == false) && (tempC < (double)heaterParmsLowerRear.tempSetPointHighOff))
@@ -471,15 +526,16 @@ void PeriodicOutputTemps()
 {
 	uint8_t strLen;
 	char formatStr[25];
-    uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
+    uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan;
 
- 	intTempCUF = (uint16_t) (thermocoupleUpperFront.readCelsius() * 10);
-	intTempCUR = (uint16_t) (thermocoupleUpperRear.readCelsius()  * 10);
-	intTempCLF = (uint16_t) (thermocoupleLowerFront.readCelsius() * 10);
-	intTempCLR = (uint16_t) (thermocoupleLowerRear.readCelsius()  * 10);
+ 	intTempCUF = (uint16_t) (InputThermocoupleUpperFront() + 0.5);
+	intTempCUR = (uint16_t) (InputThermocoupleUpperRear()  + 0.5);
+	intTempCLF = (uint16_t) (InputThermocoupleLowerFront() + 0.5);
+	intTempCLR = (uint16_t) (InputThermocoupleLowerRear()  + 0.5);
+	intTempCFan = (uint16_t) (InputThermocoupleFan()	   + 0.5);	
  
-    strLen = sprintf(formatStr,"Temps %d %d %d %d\n", 
-		intTempCUF, intTempCUR, intTempCLF, intTempCLR);
+    strLen = sprintf(formatStr,"Temps %d %d %d %d %d\n", 
+		intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan);
     if(strLen>0)
     	ble_write_string((byte *)&formatStr, strLen);
 }
@@ -899,6 +955,7 @@ void stateHeatCycleUpdate()
     
     if(saveTimer1Counter != lastTimer1Counter)
     {
+		CoolingFanControl(true);
     	UpdateHeatControlUpperFront(saveTimer1Counter);
     	UpdateHeatControlUpperRear(saveTimer1Counter);
     	UpdateHeatControlLowerFront(saveTimer1Counter);
