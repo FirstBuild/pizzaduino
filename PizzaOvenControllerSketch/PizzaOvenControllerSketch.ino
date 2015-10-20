@@ -50,7 +50,7 @@
 // Pin Definitions
 //------------------------------------------
 
-#define COOLING_FAN_SIGNAL 				(A0)
+#define COOLING_FAN_SIGNAL 				(13)
 
 // Thermocouple Definitions
 #ifdef THERMOCOUPLE_ANALOG_INPUT
