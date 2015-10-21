@@ -20,14 +20,13 @@
 * THE SOFTWARE.
 */
 
-// Pizza Oven Arduino Project
+// Pizza Oven - Arduino/Read Bear Labs Blend Micro Project
 
 //#include <String.h>
 #include <SPI.h>
 #include <boards.h>
 #include <RBL_nRF8001.h>
 #include "Boards.h"
-#include "Adafruit_MAX31855.h"
 #include "FiniteStateMachine.h"
 #include "TimerOne.h"
 
@@ -35,46 +34,31 @@
 // Macros
 //------------------------------------------
 #define PROTOCOL_MAJOR_VERSION   0
-#define PROTOCOL_MINOR_VERSION   778
+#define PROTOCOL_MINOR_VERSION   115
 #define PROTOCOL_BUGFIX_VERSION  0
 
 // If defined inputs temperatures from Blue Tooth test command
 //#define DEBUG_INPUT_TEMP
 
-// If defined Theromocouple inputs are from Analog 
-// Adafruit Analog Output K-Type Thermocouple Amplifier - AD8495
-// otherwise from
-// Adafruit SPI Output Thermocouple Amplifier MAX31855  
-#define THERMOCOUPLE_ANALOG_INPUT 
 //------------------------------------------
-// Pin Definitions
+// Macros for Constants and Pin Definitions
 //------------------------------------------
-
-#define COOLING_FAN_SIGNAL 				(A0)
-
 // Thermocouple Definitions
-#ifdef THERMOCOUPLE_ANALOG_INPUT
 #define ANALOG_REFERENCE_VOLTAGE		((double)3.3)
+
+// For now just check cool down on fan
+#define COOL_DOWN_EXIT_FAN_TEMP				((double)38.0)  // 100 degrees F
+#define COOL_DOWN_EXIT_HEATER_TEMP			((double)65.0)  // 150 degrees F
+
+// Pin Definitions
+#define COOLING_FAN_SIGNAL 				(13)
 
 #define ANALOG_THERMO_UPPER_FRONT		(A0)
 #define ANALOG_THERMO_UPPER_REAR		(A1)
 #define ANALOG_THERMO_LOWER_FRONT		(A2)
 #define ANALOG_THERMO_LOWER_REAR		(A3)
 #define ANALOG_THERMO_FAN				(A4)
-#else
-#define MAX_TEMP_READ_RETRY (10)
 
-#define SW_SPI_THERMO_DO                (A4)
-#define SW_SPI_THERMO_CLK               (A5)
-#define SW_SPI_THERMO_CS_UPPER_FRONT	(8)
-#define SW_SPI_THERMO_CS_UPPER_REAR		(5)
-#define SW_SPI_THERMO_CS_LOWER_FRONT	(3)
-#define SW_SPI_THERMO_CS_LOWER_REAR		(2)
-#endif
-
-// TBD Fan Temp TC5 on Reset?
-
-// Heater Enable Pin Definitions
 #define HEATER_ENABLE_UPPER_FRONT		(9)
 #define HEATER_ENABLE_UPPER_REAR		(10)
 #define HEATER_ENABLE_LOWER_FRONT		(11)
@@ -108,16 +92,6 @@ State stateCoolDown = State(stateCoolDownEnter,
 FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
 
 //------------------------------------------
-// Software SPI Thermocouple Definitions
-//------------------------------------------
-#ifndef THERMOCOUPLE_ANALOG_INPUT
-Adafruit_MAX31855 thermocoupleUpperFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_FRONT, SW_SPI_THERMO_DO);
-Adafruit_MAX31855 thermocoupleUpperRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_UPPER_REAR, SW_SPI_THERMO_DO);
-Adafruit_MAX31855 thermocoupleLowerFront(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_FRONT, SW_SPI_THERMO_DO);
-Adafruit_MAX31855 thermocoupleLowerRear(SW_SPI_THERMO_CLK, SW_SPI_THERMO_CS_LOWER_REAR, SW_SPI_THERMO_DO);
-#endif
-
-//------------------------------------------
 // Global Definitions
 //------------------------------------------
 
@@ -140,10 +114,10 @@ struct HeaterParameters
 	uint16_t offPercent;      // Time when a heater turns off in percent
 };
 
-HeaterParameters heaterParmsUpperFront = {false, 100, 125,   0, 64};
-HeaterParameters heaterParmsUpperRear  = {true, 100, 150,   0, 100};
-HeaterParameters heaterParmsLowerFront = {false, 100, 125,   0, 100};
-HeaterParameters heaterParmsLowerRear  = {false, 100, 125,  50, 90};
+HeaterParameters heaterParmsUpperFront = {true,   100, 150,   0, 24};
+HeaterParameters heaterParmsUpperRear  = {true,   100, 150,  25, 49};
+HeaterParameters heaterParmsLowerFront = {true,    40,  60,  50, 74};
+HeaterParameters heaterParmsLowerRear  = {true,    40,  60,  75, 100};
 
 uint16_t heaterCountsOnUpperFront;
 uint16_t heaterCountsOffUpperFront;
@@ -160,7 +134,7 @@ bool heaterHardwareStateUpperRear  = false;
 bool heaterHardwareStateLowerFront = false;
 bool heaterHardwareStateLowerRear  = false;
 
-// flags to keep the state of the heater cool down one reach High Set Point
+// flags to keep the state of the heater cool down once reach High Off Set Point
 bool heaterCoolDownStateUpperFront = false;
 bool heaterCoolDownStateUpperRear  = false;
 bool heaterCoolDownStateLowerFront = false;
@@ -174,6 +148,13 @@ volatile bool outputTempPeriodic = false;
 void ConvertHeaterPercentCounts();
 void UpdateHeaterHardware();
 void AllHeatersOffStateClear();
+void CoolingFanControl(boolean control);
+double AnalogThermocoupleTemp(uint16_t rawA2D);
+double InputThermocoupleUpperFront();
+double InputThermocoupleUpperRear();
+double InputThermocoupleLowerFront();
+double InputThermocoupleLowerRear();
+double InputThermocoupleFan();
 void UpdateHeatControlUpperFront(uint16_t currentCounterTimer);
 void UpdateHeatControlUpperRear(uint16_t currentCounterTimer);
 void UpdateHeatControlLowerFront(uint16_t currentCounterTimer);
@@ -181,7 +162,7 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer);
 void PeriodicOutputTemps();
 bool CharValidDigit(unsigned char digit);
 uint16_t GetInputValue();
-void HeaterTimerInterrupt(void);
+void HeaterTimerInterrupt();
 void ble_write_string(byte *bytes, uint8_t len);
 
 //------------------------------------------
@@ -194,7 +175,7 @@ void ConvertHeaterPercentCounts()
 	heaterCountsOffUpperFront = (uint16_t)(((uint32_t)heaterParmsUpperFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
     
 	heaterCountsOnUpperRear   = (uint16_t)(((uint32_t)heaterParmsUpperRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
-	heaterCountsOffUpperRear  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;	
+	heaterCountsOffUpperRear  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
     
 	heaterCountsOnLowerFront  = (uint16_t)(((uint32_t)heaterParmsLowerFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
 	heaterCountsOffLowerFront = (uint16_t)(((uint32_t)heaterParmsLowerFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
@@ -208,7 +189,7 @@ void UpdateHeaterHardware()
 	if(heaterHardwareStateUpperFront == false)
 		digitalWrite(HEATER_ENABLE_UPPER_FRONT, LOW);
 	else
-		digitalWrite(HEATER_ENABLE_UPPER_FRONT, HIGH);	
+		digitalWrite(HEATER_ENABLE_UPPER_FRONT, HIGH);
 
 	if(heaterHardwareStateUpperRear == false)
 		digitalWrite(HEATER_ENABLE_UPPER_REAR, LOW);
@@ -223,7 +204,7 @@ void UpdateHeaterHardware()
 	if(heaterHardwareStateLowerRear == false)
 		digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);
 	else
-		digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);	
+		digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);
 }
 
 void AllHeatersOffStateClear()
@@ -244,12 +225,11 @@ void AllHeatersOffStateClear()
 void CoolingFanControl(boolean control)
 {
 	if(control == true)
-  		digitalWrite(COOLING_FAN_SIGNAL, HIGH);	
+  		digitalWrite(COOLING_FAN_SIGNAL, HIGH);
 	else
-  		digitalWrite(COOLING_FAN_SIGNAL, LOW);	
+  		digitalWrite(COOLING_FAN_SIGNAL, LOW);
 }		
 
-#ifdef THERMOCOUPLE_ANALOG_INPUT
 double AnalogThermocoupleTemp(uint16_t rawA2D)
 {
 	double analogVoltage;
@@ -299,27 +279,6 @@ double InputThermocoupleFan()
 	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_FAN));
 	return tempC;
 }
-#else
-double InputThermocoupleUpperFront()
-{
-	uint16_t retry;
-	double tempC;
-
-	for(int retry=0; retry <= MAX_TEMP_READ_RETRY; retry++)
-	{
-		tempC = thermocoupleLowerFront.readCelsius();
-		if(0 == isnan(tempC))
-		{
-			break;
-		}	
-	}	
-			
-	if (isnan(tempC)) {
-        ble_write_string((byte *)"#lf", 3);      			     			
-	}
-	return tempC;
-}
-#endif
 
 void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 {	
@@ -340,9 +299,9 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 				heaterHardwareStateUpperFront = true;
 			}
 			// If not in cool down and greater than High Set Point turn off heater and set cool down
-			else if((heaterCoolDownStateUpperFront == false) && (tempC >= (double)heaterParmsUpperFront.tempSetPointHighOff))	
+			else if((heaterCoolDownStateUpperFront == false) && (tempC >= (double)heaterParmsUpperFront.tempSetPointHighOff))
 			{
-				icase = 2;				
+				icase = 2;
 				heaterCoolDownStateUpperFront = true;
 				heaterHardwareStateUpperFront = false;
 			}
@@ -359,15 +318,11 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
 				heaterHardwareStateUpperFront = false;
 			}
 	}
-	else	// Outside the percentage limits of the cycle
+	else	// Heater Disabled or Outside the percentage limits of the cycle
 	{
 	        icase = 9;
-			heaterCoolDownStateUpperFront = false;
 			heaterHardwareStateUpperFront = false;
 	}
-	
-//    Serial1.print("UFc");
-//    Serial1.print(icase);
 }
 
 void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
@@ -411,12 +366,8 @@ void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
 	else	// Heater Disabled or Outside the percentage limits of the cycle
 	{
 	        icase = 19;
-			heaterCoolDownStateUpperRear = false;
 			heaterHardwareStateUpperRear = false;
 	}
-	
-//    Serial1.println("URc");
-//    Serial1.println(icase);
 }
 
 void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
@@ -431,11 +382,6 @@ void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
 	{   
 			tempC = InputThermocoupleLowerFront();
 
-			if (tempC == 0.0) {
-      	        ble_write_string((byte *)"zlf", 3);
-      			return;
-    		}
-			
 			// If not in cool down and less than High Set Point Turn on Heater
 			if((heaterCoolDownStateLowerFront == false) && (tempC < (double)heaterParmsLowerFront.tempSetPointHighOff))
 			{
@@ -465,12 +411,8 @@ void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
 	else	// Heater Disabled or Outside the percentage limits of the cycle
 	{
 	        icase = 29;
-			heaterCoolDownStateLowerFront = false;
 			heaterHardwareStateLowerFront = false;
 	}
-	
-//    Serial1.println("LFc");
-//    Serial1.println(icase);
 }
 
 void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
@@ -514,12 +456,8 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
 	else	// Heater Disabled or Outside the percentage limits of the cycle
 	{
 	        icase = 39;
-			heaterCoolDownStateLowerRear = false;
 			heaterHardwareStateLowerRear = false;
 	}
-	
-//    Serial1.println("LRc");
-//    Serial1.println(icase);
 }
 
 void PeriodicOutputTemps()
@@ -528,16 +466,37 @@ void PeriodicOutputTemps()
 	char formatStr[25];
     uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan;
 
- 	intTempCUF = (uint16_t) (InputThermocoupleUpperFront() + 0.5);
-	intTempCUR = (uint16_t) (InputThermocoupleUpperRear()  + 0.5);
-	intTempCLF = (uint16_t) (InputThermocoupleLowerFront() + 0.5);
-	intTempCLR = (uint16_t) (InputThermocoupleLowerRear()  + 0.5);
-	intTempCFan = (uint16_t) (InputThermocoupleFan()	   + 0.5);	
+ 	intTempCUF =  (uint16_t) (InputThermocoupleUpperFront() + 0.5);
+	intTempCUR =  (uint16_t) (InputThermocoupleUpperRear()  + 0.5);
+	intTempCLF =  (uint16_t) (InputThermocoupleLowerFront() + 0.5);
+	intTempCLR =  (uint16_t) (InputThermocoupleLowerRear()  + 0.5);
+	intTempCFan = (uint16_t) (InputThermocoupleFan()		+ 0.5);	
  
     strLen = sprintf(formatStr,"Temps %d %d %d %d %d\n", 
 		intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan);
     if(strLen>0)
     	ble_write_string((byte *)&formatStr, strLen);
+}
+
+//------------------------------------------
+// Update Heater State Interrupt
+//------------------------------------------
+void HeaterTimerInterrupt()
+{  
+	timer1Counter++;
+
+	if(timer1Counter > (TIMER1_COUNTER_WRAP * nTimesCycleTime))
+  	{
+  		timer1Counter = 0;
+  	}
+
+	countOutputTempPeriodic++;
+	
+	if(countOutputTempPeriodic >= TIMER1_OUTPUT_TEMP_PERIODIC)
+	{
+  		countOutputTempPeriodic = 0;
+		outputTempPeriodic = true;
+	}
 }
 
 //------------------------------------------
@@ -582,27 +541,6 @@ void setup()
   ble_begin();
   
   //useInterrupt(true);
-}
-
-//------------------------------------------
-// Update Heater State Interrupt
-//------------------------------------------
-void HeaterTimerInterrupt(void)
-{  
-	timer1Counter++;
-
-	if(timer1Counter > (TIMER1_COUNTER_WRAP * nTimesCycleTime))
-  	{
-  		timer1Counter = 0;
-  	}
-
-	countOutputTempPeriodic++;
-	
-	if(countOutputTempPeriodic >= TIMER1_OUTPUT_TEMP_PERIODIC)
-	{
-  		countOutputTempPeriodic = 0;
-		outputTempPeriodic = true;
-	}
 }
 
 //------------------------------------------
@@ -997,7 +935,24 @@ void stateCoolDownUpdate()
 {
 //    if((liveCount % 100000) == 0) 
 //      Serial1.println("CU");
-    // when reach ? set temperature on ?  
+
+// For now just check cool down on fan
+    if((InputThermocoupleFan() <= COOL_DOWN_EXIT_FAN_TEMP) &&
+		(InputThermocoupleUpperFront() <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+		(InputThermocoupleUpperRear()  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+		(InputThermocoupleLowerFront() <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+		(InputThermocoupleLowerRear()  <= COOL_DOWN_EXIT_HEATER_TEMP))
+    {
+		CoolingFanControl(false);
+		poStateMachine.transitionTo(stateStandby);    
+    }
+    
+	// Output Periodic Temperatures
+    if(true == outputTempPeriodic)
+	{
+		outputTempPeriodic = false;
+		PeriodicOutputTemps();	
+	}
 }
 
 void stateCoolDownExit()
