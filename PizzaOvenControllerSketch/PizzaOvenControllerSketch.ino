@@ -29,12 +29,13 @@
 #include "Boards.h"
 #include "FiniteStateMachine.h"
 #include "TimerOne.h"
+#include "EEPROM.h"
 
 //------------------------------------------
 // Macros
 //------------------------------------------
 #define PROTOCOL_MAJOR_VERSION   0
-#define PROTOCOL_MINOR_VERSION   115
+#define PROTOCOL_MINOR_VERSION   336
 #define PROTOCOL_BUGFIX_VERSION  0
 
 // If defined inputs temperatures from Blue Tooth test command
