@@ -30,16 +30,14 @@
 #include "FiniteStateMachine.h"
 #include "TimerOne.h"
 #include "EEPROM.h"
+//#include "ThermoCoupleInterpolate.h"
 
 //------------------------------------------
 // Macros
 //------------------------------------------
 #define PROTOCOL_MAJOR_VERSION   0
-#define PROTOCOL_MINOR_VERSION   336
+#define PROTOCOL_MINOR_VERSION   2003
 #define PROTOCOL_BUGFIX_VERSION  0
-
-// If defined inputs temperatures from Blue Tooth test command
-//#define DEBUG_INPUT_TEMP
 
 //------------------------------------------
 // Macros for Constants and Pin Definitions
@@ -66,10 +64,10 @@
 #define HEATER_ENABLE_LOWER_REAR		(12)
 
 // Timer1 Used to keep track of heat control cycles
-#define TIMER1_PERIOD_MICRO_SEC			(10000) 	// timer1 10 mSec interval 
+#define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
 #define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
-#define TIMER1_COUNTER_WRAP				(100)      // Count down for a period of 1 second
-#define TIMER1_OUTPUT_TEMP_PERIODIC     (200)       // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
+#define TIMER1_COUNTER_WRAP				(1000)      // Count down for a period of 1 second
+#define TIMER1_OUTPUT_TEMP_PERIODIC     (1000)       // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
 
 //------------------------------------------
 //state machine setup 
@@ -101,10 +99,8 @@ FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in
 volatile uint16_t timer1Counter = 0;
 uint16_t countOutputTempPeriodic = 0;
 
-// Heater cycle time in multiples of 1 minute
+// Heater cycle time in multiples of 1 second
 uint16_t nTimesCycleTime = 4;
-
-double testTemp;
 
 struct HeaterParameters 
 {
@@ -115,10 +111,10 @@ struct HeaterParameters
 	uint16_t offPercent;      // Time when a heater turns off in percent
 };
 
-HeaterParameters heaterParmsUpperFront = {true,   100, 150,   0, 24};
-HeaterParameters heaterParmsUpperRear  = {true,   100, 150,  25, 49};
-HeaterParameters heaterParmsLowerFront = {true,    40,  60,  50, 74};
-HeaterParameters heaterParmsLowerRear  = {true,    40,  60,  75, 100};
+HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 70};
+HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  37, 100 };
+HeaterParameters heaterParmsLowerFront = {true,   250,  288,   60, 100};
+HeaterParameters heaterParmsLowerRear  = {true,   250,  288,   0,  33 };
 
 uint16_t heaterCountsOnUpperFront;
 uint16_t heaterCountsOffUpperFront;
@@ -164,8 +160,148 @@ void PeriodicOutputTemps();
 bool CharValidDigit(unsigned char digit);
 uint16_t GetInputValue();
 void HeaterTimerInterrupt();
-void ble_write_string(byte *bytes, uint8_t len);
 
+#if 1
+//------------------------------------------
+// Thermocouple Interpolation Until Can Split into separate file
+//------------------------------------------
+
+// Hard Coded to check correct number of values are defined
+
+#define A2D8495_K_TABLE_SIZE	(47)
+
+// Analog Devices AD8495 K Thermocouple Lookup Tables
+//	Table of A2D Values to be interpolated
+double analogAD8495KLookup[A2D8495_K_TABLE_SIZE] =
+{
+	0.003,
+	0.1,
+	0.125,
+	0.2,
+	0.301,
+	0.402,
+	0.504,
+	0.605,
+	0.705,
+	0.803,
+	0.901,
+	0.999,
+	1.097,
+	1.196,
+	1.295,
+	1.396,
+	1.497,
+	1.599,
+	1.701,
+	1.803,
+	1.906,
+	2.01,
+	2.113,
+	2.217,
+	2.321,
+	2.425,
+	2.529,
+	2.634,
+	2.738,
+	2.843,
+	2.947,
+	3.051,
+	3.155,
+	3.259,
+	3.362,
+	3.465,
+	3.568,
+	3.67,
+	3.772,
+	3.874,
+	3.975,
+	4.076,
+	4.176,
+	4.275,
+	4.374,
+	4.473,
+	4.571
+};
+
+// Table of temperatures to be interpolated
+uint16_t analogAD8495KTemp[A2D8495_K_TABLE_SIZE] =
+{
+	0,
+	20,
+	25,
+	40,
+	60,
+	80,
+	100,
+	120,
+	140,
+	160,
+	180,
+	200,
+	220,
+	240,
+	260,
+	280,
+	300,
+	320,
+	340,
+	360,
+	380,
+	400,
+	420,
+	440,
+	460,
+	480,
+	500,
+	520,
+	540,
+	560,
+	580,
+	600,
+	620,
+	640,
+	660,
+	680,
+	700,
+	720,
+	740,
+	760,
+	780,
+	800,
+	820,
+	840,
+	860,
+	880,
+	900
+};
+
+// Modified for _out to be uint8_t, so cast as (double) before using
+double FmultiMap(double val, double * _in, uint16_t * _out, uint8_t size)
+{	
+  // take care the value is within range
+  // val = constrain(val, _in[0], _in[size-1]);
+  if (val <= _in[0]) return (double)_out[0];
+  if (val >= _in[size-1]) return (double)_out[size-1];
+
+  // search right interval (added bound check even though shouldn't hit)
+  uint8_t pos = 1;  // _in[0] already tested
+  while((val > _in[pos]) && (pos < size)) pos++;
+
+  // this will handle all exact "points" in the _in array
+  if (val == _in[pos]) return (double)_out[pos];
+
+  // interpolate in the right segment for the rest
+  return (val - _in[pos-1]) * ((double)_out[pos] - (double)_out[pos-1]) / (_in[pos] - _in[pos-1]) + (double)_out[pos-1];
+}
+
+double AD8495KTCInterpolate(double A2D)
+{
+	double tempC;
+	
+	tempC = FmultiMap(A2D, analogAD8495KLookup, analogAD8495KTemp, (uint8_t) A2D8495_K_TABLE_SIZE);
+	return tempC;   
+}
+#endif
 //------------------------------------------
 // Code
 //------------------------------------------
@@ -241,11 +377,23 @@ double AnalogThermocoupleTemp(uint16_t rawA2D)
 	return tempC;
 }
 
+double AnalogTCVolts(uint16_t rawA2D)
+{
+	double analogVoltage;
+	
+	analogVoltage = (float)rawA2D * ANALOG_REFERENCE_VOLTAGE / 1023.0;
+ 
+	return analogVoltage;
+}
+
 double InputThermocoupleUpperFront()
 {
 	double tempC;
 	
-	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_UPPER_FRONT));
+//	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_UPPER_FRONT));
+
+	tempC = AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_UPPER_FRONT)));
+	
 	return tempC;
 }
 
@@ -253,7 +401,9 @@ double InputThermocoupleUpperRear()
 {
 	double tempC;
 	
-	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_UPPER_REAR));
+//	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_UPPER_REAR));
+
+	tempC = AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_UPPER_REAR)));
 	return tempC;
 }
 
@@ -261,7 +411,9 @@ double InputThermocoupleLowerFront()
 {
 	double tempC;
 	
-	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_LOWER_FRONT));
+// tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_LOWER_FRONT));
+  
+    tempC = AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_LOWER_FRONT)));
 	return tempC;
 }
 
@@ -269,7 +421,9 @@ double InputThermocoupleLowerRear()
 {
 	double tempC;
 	
-	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_LOWER_REAR));
+//	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_LOWER_REAR));
+
+    tempC = AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_LOWER_REAR)));
 	return tempC;
 }
 
@@ -277,7 +431,9 @@ double InputThermocoupleFan()
 {
 	double tempC;
 	
-	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_FAN));
+//	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_FAN));
+
+    tempC = AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_FAN)));
 	return tempC;
 }
 
@@ -466,7 +622,7 @@ void PeriodicOutputTemps()
 	uint8_t strLen;
 	char formatStr[25];
     uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan;
-
+    
  	intTempCUF =  (uint16_t) (InputThermocoupleUpperFront() + 0.5);
 	intTempCUR =  (uint16_t) (InputThermocoupleUpperRear()  + 0.5);
 	intTempCLF =  (uint16_t) (InputThermocoupleLowerFront() + 0.5);
@@ -476,7 +632,16 @@ void PeriodicOutputTemps()
     strLen = sprintf(formatStr,"Temps %d %d %d %d %d\n", 
 		intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan);
     if(strLen>0)
-    	ble_write_string((byte *)&formatStr, strLen);
+    	ble_write_bytes((byte *)&formatStr, strLen);
+#if 0    	
+ 	uint16_t a2DRawUF = analogRead(ANALOG_THERMO_UPPER_FRONT);
+ 	uint16_t VUF =  (uint16_t) (AnalogTCVolts(a2DRawUF) * 1000.0);
+
+    strLen = sprintf(formatStr,"RAW A2D %d V %d\n", 
+		a2DRawUF, VUF);
+    if(strLen>0)
+    	ble_write_bytes((byte *)&formatStr, strLen);
+#endif    	
 }
 
 //------------------------------------------
@@ -536,7 +701,7 @@ void setup()
   //ble_set_pins(3, 2);
   
   // Set your BLE Shield name here, max. length 10
-  ble_set_name("Pizza Oven");
+  ble_set_name((char*)&"Pizza Oven");
   
   // Init. and start BLE library.
   ble_begin();
@@ -573,7 +738,7 @@ void loop()
           strLen = sprintf(formatStr,"V %u.%u bugfix %u\n", 
 				(uint16_t)PROTOCOL_MAJOR_VERSION, (uint16_t)PROTOCOL_MINOR_VERSION, (uint16_t)PROTOCOL_BUGFIX_VERSION);
           if(strLen>0)
-            ble_write_string((byte *)&formatStr, strLen);	
+            ble_write_bytes((byte *)&formatStr, strLen);	
 	      break;
 
       case 'p': // query heat control parameters
@@ -613,7 +778,7 @@ void loop()
 			}			 				    
    
            if(strLen>0)
-             ble_write_string((byte *)&formatStr, strLen);
+             ble_write_bytes((byte *)&formatStr, strLen);
         }    	
 	    break;
             
@@ -642,13 +807,6 @@ void loop()
 		}		
         break;
 
-      case 'o':	// Test input integer parameter and set test temperature
-		Serial1.println("input n test");
-		inputValue = GetInputValue();
-		Serial1.println(inputValue);
-		testTemp = (double) inputValue;
-        break;
-        
       case 'l':	// Set Lower Set Point Parameter 
 		Serial1.println("Set Lower Set Point Parameter");
 		if(ble_available() > 2)
@@ -776,14 +934,14 @@ void loop()
 				}	 				
 				else
 				{	 
-		    		ble_write_string((byte *)"Invalid n", 9);
+		    		ble_write_bytes((byte *)"Invalid n", 9);
 		    		Serial1.println("Invalid n");
 		    	}
 	    	}			
 	    }
 	    else
 		{	 
-    		ble_write_string((byte *)"Invalid Heat", 12);
+    		ble_write_bytes((byte *)"Invalid Heat", 12);
     		Serial1.println("Invalid Heat");
     	}			
 		break;		   
@@ -959,33 +1117,4 @@ void stateCoolDownUpdate()
 void stateCoolDownExit()
 {
 	     Serial1.println("CX");
-}
-
-//------------------------------------------
-// Bluetooth Write String Routines
-//------------------------------------------
-void ble_write_string(byte *bytes, uint8_t len)
-{
-  if (buf_len + len > 20)
-  {
-	// Event counts reduced from 15000 from reference code
-    for (int j = 0; j < 100; j++)
-      ble_do_events();
-    
-    buf_len = 0;
-  }
-  
-  for (int j = 0; j < len; j++)
-  {
-    ble_write(bytes[j]);
-    buf_len++;
-  }
-    
-  if (buf_len == 20)
-  {
-    for (int j = 0; j < 100; j++)
-      ble_do_events();
-    
-    buf_len = 0;
-  }  
 }
