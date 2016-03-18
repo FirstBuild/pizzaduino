@@ -25,7 +25,7 @@
 //#include <String.h>
 #include <SPI.h>
 #include <boards.h>
-#include <RBL_nRF8001.h>
+//#include <RBL_nRF8001.h>
 #include "Boards.h"
 #include "FiniteStateMachine.h"
 #include "TimerOne.h"
@@ -43,25 +43,35 @@
 // Macros for Constants and Pin Definitions
 //------------------------------------------
 // Thermocouple Definitions
-#define ANALOG_REFERENCE_VOLTAGE		((double)3.3)
+#define ANALOG_REFERENCE_VOLTAGE		((double)5.0)
 
 // For now just check cool down on fan
 #define COOL_DOWN_EXIT_FAN_TEMP				((double)38.0)  // 100 degrees F
 #define COOL_DOWN_EXIT_HEATER_TEMP			((double)65.0)  // 150 degrees F
 
 // Pin Definitions
-#define COOLING_FAN_SIGNAL 				(13)
+#define COOLING_FAN_SIGNAL 				(12)
 
-#define ANALOG_THERMO_UPPER_FRONT		(A0)
-#define ANALOG_THERMO_UPPER_REAR		(A1)
-#define ANALOG_THERMO_LOWER_FRONT		(A2)
-#define ANALOG_THERMO_LOWER_REAR		(A3)
+#define ANALOG_THERMO_UPPER_FRONT		(A2)
+#define ANALOG_THERMO_UPPER_REAR		(A3)
+#define ANALOG_THERMO_LOWER_FRONT		(A6)
+#define ANALOG_THERMO_LOWER_REAR		(A7)
 #define ANALOG_THERMO_FAN				(A4)
 
-#define HEATER_ENABLE_UPPER_FRONT		(9)
-#define HEATER_ENABLE_UPPER_REAR		(10)
-#define HEATER_ENABLE_LOWER_FRONT		(11)
-#define HEATER_ENABLE_LOWER_REAR		(12)
+#define HEATER_ENABLE_UPPER_FRONT		(A1)
+#define HEATER_ENABLE_UPPER_REAR		(A0)
+#define HEATER_ENABLE_LOWER_FRONT		(10)
+#define HEATER_ENABLE_LOWER_REAR		(11)
+
+#define HEATER_UPPER_FRONT_DLB (8) //Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_UPPER_REAR_DLB (9)  //Relay that provides L1 to the triac, must be ON for heat
+
+#define TEN_V_ENABLE (2) //Enable signal to turn on the 10V power supply that is the hold voltage for relays
+#define BOOST_ENABLE (7) //Enable 15V pull in voltage for relays
+#define RELAY_WATCHDOG (6) //Signal must toggle at a rate of X Hz in order to enable relays
+#define VOLTAGE_DETECT (5) //Used to determine supply voltage as 208VAC or 240VAC
+#define POWER_SWITCH_AC_INPUT (3) //AC Input that indicates the state of the power switch
+#define DLB_STATUS_AC_INPUT (4) //AC Intput that indicates the status of the L2 panel mount DLB relays
 
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
@@ -111,10 +121,10 @@ struct HeaterParameters
 	uint16_t offPercent;      // Time when a heater turns off in percent
 };
 
-HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 70};
-HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  37, 100 };
-HeaterParameters heaterParmsLowerFront = {true,   250,  288,   60, 100};
-HeaterParameters heaterParmsLowerRear  = {true,   250,  288,   0,  33 };
+HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80};
+HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100 };
+HeaterParameters heaterParmsLowerFront = {true,   387,  399,   60, 100};
+HeaterParameters heaterParmsLowerRear  = {true,   377,  388,   0,  33 };
 
 uint16_t heaterCountsOnUpperFront;
 uint16_t heaterCountsOffUpperFront;
@@ -335,13 +345,21 @@ void UpdateHeaterHardware()
 
 	if(heaterHardwareStateLowerFront == false)
 		digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
-	else
+	else {
+    digitalWrite(BOOST_ENABLE, HIGH); //Turn off Boost
 		digitalWrite(HEATER_ENABLE_LOWER_FRONT, HIGH);
+    delay(1);
+    digitalWrite(BOOST_ENABLE, LOW); //Turn off Boost
+	}
 
 	if(heaterHardwareStateLowerRear == false)
 		digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);
-	else
-		digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);
+	else{
+    digitalWrite(BOOST_ENABLE, HIGH); //Turn off Boost
+    digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);
+    delay(1);
+    digitalWrite(BOOST_ENABLE, LOW); //Turn off Boost
+  }
 }
 
 void AllHeatersOffStateClear()
@@ -433,7 +451,7 @@ double InputThermocoupleFan()
 	
 //	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_FAN));
 
-    tempC = AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_FAN)));
+    tempC = 0;//AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_FAN)));
 	return tempC;
 }
 
@@ -632,7 +650,7 @@ void PeriodicOutputTemps()
     strLen = sprintf(formatStr,"Temps %d %d %d %d %d\n", 
 		intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan);
     if(strLen>0)
-    	ble_write_bytes((byte *)&formatStr, strLen);
+    	Serial.write((byte *)&formatStr, strLen);
 #if 0    	
  	uint16_t a2DRawUF = analogRead(ANALOG_THERMO_UPPER_FRONT);
  	uint16_t VUF =  (uint16_t) (AnalogTCVolts(a2DRawUF) * 1000.0);
@@ -670,8 +688,8 @@ void HeaterTimerInterrupt()
 //------------------------------------------
 void setup()
 {
-  Serial1.begin(9600); 
-  Serial1.println("BLE Arduino Slave");
+  Serial.begin(9600); 
+  Serial.println("BLE Arduino Slave");
 
   // Initialize Timer1
   Timer1.initialize(TIMER1_PERIOD_MICRO_SEC * TIMER1_PERIOD_CLOCK_FACTOR);
@@ -694,17 +712,37 @@ void setup()
   pinMode(HEATER_ENABLE_LOWER_REAR, OUTPUT);
   digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW); 
 
+  pinMode(HEATER_UPPER_FRONT_DLB, OUTPUT);
+  digitalWrite(HEATER_UPPER_FRONT_DLB, LOW);
+  pinMode(HEATER_UPPER_REAR_DLB, OUTPUT);
+  digitalWrite(HEATER_UPPER_REAR_DLB, LOW);
+  pinMode(TEN_V_ENABLE, OUTPUT);
+  digitalWrite(TEN_V_ENABLE, LOW);
+  pinMode(BOOST_ENABLE, OUTPUT); 
+  digitalWrite(BOOST_ENABLE, LOW);
+  pinMode(RELAY_WATCHDOG, OUTPUT); 
+
   ConvertHeaterPercentCounts();
+      Serial.println("Start");
+    if(poStateMachine.isInState(stateStandby) || 
+      poStateMachine.isInState(stateCoolDown))
+    {         
+      poStateMachine.transitionTo(stateHeatCycle);
+    }
+    else
+    {
+      Serial.println("Invalid");
+    } 
    
   // Default pins set to 9 and 8 for REQN and RDYN
   // Set your REQN and RDYN here before ble_begin() if you need
   //ble_set_pins(3, 2);
   
   // Set your BLE Shield name here, max. length 10
-  ble_set_name((char*)&"Pizza Oven");
+//  ble_set_name((char*)&"Pizza Oven");
   
   // Init. and start BLE library.
-  ble_begin();
+//ble_begin();
   
   //useInterrupt(true);
 }
@@ -725,11 +763,11 @@ void loop()
 
   // Process Blue Tooth Command if available
   // TBD ble_available returns -1 if nothing available
-  if(ble_available() > 0)
+ /* if(ble_available() > 0)
   {
     byte cmd;
     cmd = ble_read();
-    Serial1.write(cmd);
+    Serial.write(cmd);
     
     // Parse data here
     switch (cmd)
@@ -738,14 +776,14 @@ void loop()
           strLen = sprintf(formatStr,"V %u.%u bugfix %u\n", 
 				(uint16_t)PROTOCOL_MAJOR_VERSION, (uint16_t)PROTOCOL_MINOR_VERSION, (uint16_t)PROTOCOL_BUGFIX_VERSION);
           if(strLen>0)
-            ble_write_bytes((byte *)&formatStr, strLen);	
+//            ble_write_bytes((byte *)&formatStr, strLen);	
 	      break;
 
       case 'p': // query heat control parameters
 		if(ble_available() >= 1)
 		{
 		    cmd = ble_read();
-			Serial1.write(cmd);
+			Serial.write(cmd);
 			
 			switch(cmd)
 			{
@@ -778,41 +816,34 @@ void loop()
 			}			 				    
    
            if(strLen>0)
-             ble_write_bytes((byte *)&formatStr, strLen);
-        }    	
+//             ble_write_bytes((byte *)&formatStr, strLen);
+//        }    	
 	    break;
             
       case 's':	// Start Pizza Oven Cycle			
-		Serial1.println("Start");
-		if(poStateMachine.isInState(stateStandby) || 
-			poStateMachine.isInState(stateCoolDown))
-		{					
-			poStateMachine.transitionTo(stateHeatCycle);
-		}
-		else
-		{
-			Serial1.println("Invalid");
-		}	
+		*/
+
+    /*
         break;
 
       case 'q':	// Quit Pizza Oven Cycle
-		Serial1.println("Exit");			
+		Serial.println("Exit");			
 		if(poStateMachine.isInState(stateHeatCycle)) 
 		{
 			poStateMachine.transitionTo(stateCoolDown);
 		}
 		else
 		{
-			Serial1.println("Invalid");			
+			Serial.println("Invalid");			
 		}		
         break;
 
       case 'l':	// Set Lower Set Point Parameter 
-		Serial1.println("Set Lower Set Point Parameter");
+		Serial.println("Set Lower Set Point Parameter");
 		if(ble_available() > 2)
 		{
 		    cmd = ble_read();
-			Serial1.write(cmd);
+			Serial.write(cmd);
 			
 			// TBD Validate Range
 			switch(cmd)
@@ -836,11 +867,11 @@ void loop()
         break;
 
       case 'u':	// Set Upper Set Point Parameter 
-		Serial1.println("Set Upper Set Point Parameter");
+		Serial.println("Set Upper Set Point Parameter");
 		if(ble_available() > 2)
 		{
 		    cmd = ble_read();
-			Serial1.write(cmd);
+			Serial.write(cmd);
 			
 			// TBD Validate Range
 			switch(cmd)
@@ -864,11 +895,11 @@ void loop()
         break;
 
       case 'n':	// Set On Percent Parameter 
-		Serial1.println("Set On Percent Parameter");
+		Serial.println("Set On Percent Parameter");
 		if(ble_available() > 2)
 		{
 		    cmd = ble_read();
-			Serial1.write(cmd);
+			Serial.write(cmd);
 			
 			// TBD Validate Range
 			switch(cmd)
@@ -892,11 +923,11 @@ void loop()
         break;
 
       case 'f':	// Set Off Percent Parameter 
-		Serial1.println("Set Off Percent Parameter");
+		Serial.println("Set Off Percent Parameter");
 		if(ble_available() > 2)
 		{
 		    cmd = ble_read();
-			Serial1.write(cmd);
+			Serial.write(cmd);
 			
 			// TBD Validate Range
 			switch(cmd)
@@ -923,7 +954,7 @@ void loop()
       	if(poStateMachine.isInState(stateStandby) || 
 			poStateMachine.isInState(stateCoolDown))
 		{
-			Serial1.println("Set Time Period Cycle Seconds");
+			Serial.println("Set Time Period Cycle Seconds");
 			if(ble_available() >= 1)
 			{
 				tempMultiply = GetInputValue();
@@ -934,15 +965,15 @@ void loop()
 				}	 				
 				else
 				{	 
-		    		ble_write_bytes((byte *)"Invalid n", 9);
-		    		Serial1.println("Invalid n");
+//		    		ble_write_bytes((byte *)"Invalid n", 9);
+		    		Serial.println("Invalid n");
 		    	}
 	    	}			
 	    }
 	    else
 		{	 
-    		ble_write_bytes((byte *)"Invalid Heat", 12);
-    		Serial1.println("Invalid Heat");
+//    		ble_write_bytes((byte *)"Invalid Heat", 12);
+    		Serial.println("Invalid Heat");
     	}			
 		break;		   
         
@@ -950,11 +981,11 @@ void loop()
 		;	
     	}	  
  	}
- 	
+ 	*/
  	poStateMachine.update();
 	
  	// send out any outstanding data
-    ble_do_events();
+  //  ble_do_events();
     buf_len = 0;
 }
 
@@ -974,8 +1005,8 @@ uint16_t GetInputValue()
 	unsigned char digit;
 	uint16_t loop;
 	
-	cBytesAvailable = ble_available();
-//	Serial1.println((uint16_t)cBytesAvailable);
+//	cBytesAvailable = ble_available();
+//	Serial.println((uint16_t)cBytesAvailable);
 	if(cBytesAvailable > 0)
 	{
 		nBytesAvailable = (byte)cBytesAvailable;
@@ -987,7 +1018,7 @@ uint16_t GetInputValue()
 		
 		for(loop=0; loop < nBytesAvailable; loop++)
 		{ 
-			digit = ble_read();
+//			digit = ble_read();
 			if(CharValidDigit(digit))
 			{
 				inputValue *= 10;
@@ -1010,18 +1041,18 @@ uint16_t GetInputValue()
 
 void stateStandbyEnter()
 {
-	Serial1.println("stateStandbyEnter");
+	Serial.println("stateStandbyEnter");
 }
 
 void stateStandbyUpdate()
 {
 //  if((liveCount % 100000) == 0) 
-//     Serial1.println("SU");
+//     Serial.println("SU");
 }
 
 void stateStandbyExit()
 {
-	     Serial1.println("SX");
+	     Serial.println("SX");
 }
 
 //------------------------------------------
@@ -1032,18 +1063,26 @@ uint16_t saveTimer1Counter, lastTimer1Counter;
 
 void stateHeatCycleEnter()
 {
-	Serial1.println("stateHeatCycleEnter");
+	Serial.println("stateHeatCycleEnter");
 	
 	// Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
 	timer1Counter = 0;
-	
+
+  digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
+  digitalWrite(BOOST_ENABLE, HIGH); //Turn on Boost
+  delay(1);
+  digitalWrite(HEATER_UPPER_FRONT_DLB, HIGH);
+  digitalWrite(HEATER_UPPER_REAR_DLB, HIGH);
 	CoolingFanControl(true);
+  delay(1);
+  digitalWrite(BOOST_ENABLE, LOW); //Turn off Boost
+  
 }
 
 void stateHeatCycleUpdate()
 {	  
 //    if((liveCount % 100) == 0) 
-//      Serial1.println("HU");
+//      Serial.println("HU");
     
     // Save working value timer1Counter since can be updated by interrupt  
     saveTimer1Counter = timer1Counter;
@@ -1075,7 +1114,7 @@ void stateHeatCycleUpdate()
 
 void stateHeatCycleExit()
 {
-	     Serial1.println("HX");
+	     Serial.println("HX");
 	     AllHeatersOffStateClear();
 }
 
@@ -1087,13 +1126,13 @@ void stateHeatCycleExit()
 
 void stateCoolDownEnter()
 {
-	Serial1.println("stateCoolDown");
+	Serial.println("stateCoolDown");
 }
 
 void stateCoolDownUpdate()
 {
 //    if((liveCount % 100000) == 0) 
-//      Serial1.println("CU");
+//      Serial.println("CU");
 
 // For now just check cool down on fan
     if((InputThermocoupleFan() <= COOL_DOWN_EXIT_FAN_TEMP) &&
@@ -1116,5 +1155,5 @@ void stateCoolDownUpdate()
 
 void stateCoolDownExit()
 {
-	     Serial1.println("CX");
+	     Serial.println("CX");
 }
