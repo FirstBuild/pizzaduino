@@ -22,14 +22,15 @@
 
 // Pizza Oven - Arduino/Read Bear Labs Blend Micro Project
 
-#include <SPI.h>
-#include "Boards.h"
+//#include <SPI.h>
+//#include "Boards.h"
 #include "FiniteStateMachine.h"
 #include "TimerOne.h"
 #include "EEPROM.h"
 //#include "ThermoCoupleInterpolate.h"
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
+#include "ac_input.h"
 
 //------------------------------------------
 // Macros
@@ -154,10 +155,6 @@ void UpdateHeaterHardware();
 void AllHeatersOffStateClear();
 void CoolingFanControl(boolean control);
 float AnalogThermocoupleTemp(uint16_t rawA2D);
-float InputThermocoupleUpperFront();
-float InputThermocoupleUpperRear();
-float InputThermocoupleLowerFront();
-float InputThermocoupleLowerRear();
 float InputThermocoupleFan();
 void readThermocouples(void);
 void UpdateHeatControlUpperFront(uint16_t currentCounterTimer);
@@ -183,7 +180,7 @@ void readThermocouples(void)
       thermocoupleUpperFront = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
       break;
     case 1:
-      thermocoupleUpperRear= readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
+      thermocoupleUpperRear = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
       break;
     case 2:
       thermocoupleLowerFront = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
@@ -488,6 +485,11 @@ void PeriodicOutputTemps()
   if (strLen > 0)
     Serial.write((byte *)&formatStr, strLen);
 
+  Serial.print("AC1: ");
+  Serial.print(getAcInputOne());
+  Serial.print(", AC2: ");
+  Serial.println(getAcInputTwo());
+
 #if 0
   uint16_t a2DRawUF = analogRead(ANALOG_THERMO_UPPER_FRONT);
   uint16_t VUF =  (uint16_t) (AnalogTCVolts(a2DRawUF) * 1000.0);
@@ -525,6 +527,8 @@ void HeaterTimerInterrupt()
 //------------------------------------------
 void setup()
 {
+  setupAcInputs();
+  
   Serial.begin(9600);
   Serial.println("BLE Arduino Slave");
 
@@ -588,7 +592,7 @@ void handleRelayWatchdog(void)
 {
   static unsigned long oldTime = micros();
   unsigned long newTime = micros();
-  
+
   if ((newTime < oldTime) || ((newTime - oldTime) >= 500))
   {
     digitalWrite(RELAY_WATCHDOG, !digitalRead(RELAY_WATCHDOG));
@@ -607,7 +611,7 @@ uint16_t tempMultiply, tempPercent, tempTemp;
 
 void loop()
 {
-  #ifdef KILL
+#ifdef KILL
   char formatStr[25];
   uint16_t strLen;
 
@@ -837,7 +841,7 @@ void loop()
             }
           */
         }
-              #endif
+#endif
     }
 
   }
@@ -847,6 +851,7 @@ void loop()
   buf_len = 0;
   readThermocouples();
   handleRelayWatchdog();
+  runAcInputs();
 }
 
 bool CharValidDigit(unsigned char digit)
