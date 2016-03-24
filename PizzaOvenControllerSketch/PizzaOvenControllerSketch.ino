@@ -62,10 +62,10 @@ void stateStandbyUpdate();
 void stateStandbyExit();
 State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
 
-//void stateTurnOnDlbEnter();
-//void stateTurnOnDlbUpdate();
-//void stateTurnOnDlbExit();
-//State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
+void stateTurnOnDlbEnter();
+void stateTurnOnDlbUpdate();
+void stateTurnOnDlbExit();
+State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
 
 void stateHeatCycleEnter();
 void stateHeatCycleUpdate();
@@ -115,10 +115,10 @@ uint16_t heaterCountsOnLowerRear;
 uint16_t heaterCountsOffLowerRear;
 
 // flags to keep the state of the heater hardware
-bool heaterHardwareStateUpperFront = false;
-bool heaterHardwareStateUpperRear  = false;
-bool heaterHardwareStateLowerFront = false;
-bool heaterHardwareStateLowerRear  = false;
+RelayState heaterHardwareStateUpperFront = relayStateOff;
+RelayState heaterHardwareStateUpperRear  = relayStateOff;
+RelayState heaterHardwareStateLowerFront = relayStateOff;
+RelayState heaterHardwareStateLowerRear  = relayStateOff;
 
 // flags to keep the state of the heater cool down once reach High Off Set Point
 bool heaterCoolDownStateUpperFront = false;
@@ -203,71 +203,17 @@ void ConvertHeaterPercentCounts()
 
 void UpdateHeaterHardware()
 {
-  static bool lastheaterHardwareStateUpperFront = !heaterHardwareStateUpperFront;
-  static bool lastheaterHardwareStateUpperRear = !heaterHardwareStateUpperRear;
-  static bool lastheaterHardwareStateLowerFront = !heaterHardwareStateLowerFront;
-  static bool lastheaterHardwareStateLowerRear = !heaterHardwareStateLowerRear;
-
-  if (heaterHardwareStateUpperFront != lastheaterHardwareStateUpperFront)
-  {
-    if (heaterHardwareStateUpperFront == false)
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
-    }
-    else
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
-    }
-    lastheaterHardwareStateUpperFront = heaterHardwareStateUpperFront;
-  }
-
-
-  if (heaterHardwareStateUpperRear != lastheaterHardwareStateUpperRear)
-  {
-    if (heaterHardwareStateUpperRear == false)
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
-    }
-    else
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
-    }
-    lastheaterHardwareStateUpperRear = heaterHardwareStateUpperRear;
-  }
-
-  if (heaterHardwareStateLowerFront != lastheaterHardwareStateLowerFront)
-  {
-    if (heaterHardwareStateLowerFront == false)
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
-    }
-    else
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
-    }
-    lastheaterHardwareStateLowerFront = heaterHardwareStateLowerFront;
-  }
-
-  if (heaterHardwareStateLowerRear != lastheaterHardwareStateLowerRear)
-  {
-    if (heaterHardwareStateLowerRear == false)
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
-    }
-    else
-    {
-      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
-    }
-    lastheaterHardwareStateLowerRear = heaterHardwareStateLowerRear;
-  }
+  changeRelayState(HEATER_ENABLE_UPPER_FRONT, heaterHardwareStateUpperFront);
+  changeRelayState(HEATER_ENABLE_UPPER_REAR, heaterHardwareStateUpperRear);
+  changeRelayState(HEATER_ENABLE_LOWER_FRONT, heaterHardwareStateLowerFront);
+  changeRelayState(HEATER_ENABLE_LOWER_REAR, heaterHardwareStateLowerRear);
 }
-
 void AllHeatersOffStateClear()
 {
-  heaterHardwareStateUpperFront = false;
-  heaterHardwareStateUpperRear  = false;
-  heaterHardwareStateLowerFront = false;
-  heaterHardwareStateLowerRear  = false;
+  heaterHardwareStateUpperFront = relayStateOff;
+  heaterHardwareStateUpperRear  = relayStateOff;
+  heaterHardwareStateLowerFront = relayStateOff;
+  heaterHardwareStateLowerRear  = relayStateOff;
 
   heaterCoolDownStateUpperFront = false;
   heaterCoolDownStateUpperRear  = false;
@@ -320,7 +266,7 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
   float tempC;
   uint16_t icase = 0;
 
-  heaterHardwareStateUpperFront = false;
+  heaterHardwareStateUpperFront = relayStateOff;
   if ((heaterParmsUpperFront.enabled == true) &&
       (currentCounterTimer >= heaterCountsOnUpperFront) &&
       (currentCounterTimer <= heaterCountsOffUpperFront))
@@ -331,32 +277,32 @@ void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
     if ((heaterCoolDownStateUpperFront == false) && (tempC < (float)heaterParmsUpperFront.tempSetPointHighOff))
     {
       icase = 1;
-      heaterHardwareStateUpperFront = true;
+      heaterHardwareStateUpperFront = relayStateOn;
     }
     // If not in cool down and greater than High Set Point turn off heater and set cool down
     else if ((heaterCoolDownStateUpperFront == false) && (tempC >= (float)heaterParmsUpperFront.tempSetPointHighOff))
     {
       icase = 2;
       heaterCoolDownStateUpperFront = true;
-      heaterHardwareStateUpperFront = false;
+      heaterHardwareStateUpperFront = relayStateOff;
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
     else if ((heaterCoolDownStateUpperFront == true) && (tempC <= (float)heaterParmsUpperFront.tempSetPointLowOn))
     {
       icase = 3;
       heaterCoolDownStateUpperFront = false;
-      heaterHardwareStateUpperFront = true;
+      heaterHardwareStateUpperFront = relayStateOn;
     }
     else // In cool down but have not reached the Low Set Point
     {
       icase = 4;
-      heaterHardwareStateUpperFront = false;
+      heaterHardwareStateUpperFront = relayStateOff;
     }
   }
   else	// Heater Disabled or Outside the percentage limits of the cycle
   {
     icase = 9;
-    heaterHardwareStateUpperFront = false;
+    heaterHardwareStateUpperFront = relayStateOff;
   }
 }
 
@@ -365,7 +311,7 @@ void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
   float tempC;
   uint16_t icase = 0;  // For case debug
 
-  heaterHardwareStateUpperRear = false;
+  heaterHardwareStateUpperRear = relayStateOff;
   if ((heaterParmsUpperRear.enabled == true) &&
       (currentCounterTimer >= heaterCountsOnUpperRear) &&
       (currentCounterTimer <= heaterCountsOffUpperRear))
@@ -376,32 +322,32 @@ void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
     if ((heaterCoolDownStateUpperRear == false) && (tempC < (float)heaterParmsUpperRear.tempSetPointHighOff))
     {
       icase = 11;
-      heaterHardwareStateUpperRear = true;
+      heaterHardwareStateUpperRear = relayStateOn;
     }
     // If not in cool down and greater than High Set Point turn off heater and set cool down
     else if ((heaterCoolDownStateUpperRear == false) && (tempC >= (float)heaterParmsUpperRear.tempSetPointHighOff))
     {
       icase = 12;
       heaterCoolDownStateUpperRear = true;
-      heaterHardwareStateUpperRear = false;
+      heaterHardwareStateUpperRear = relayStateOff;
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
     else if ((heaterCoolDownStateUpperRear == true) && (tempC <= (float)heaterParmsUpperRear.tempSetPointLowOn))
     {
       icase = 13;
       heaterCoolDownStateUpperRear = false;
-      heaterHardwareStateUpperRear = true;
+      heaterHardwareStateUpperRear = relayStateOn;
     }
     else // In cool down but have not reached the Low Set Point
     {
       icase = 14;
-      heaterHardwareStateUpperRear = false;
+      heaterHardwareStateUpperRear = relayStateOff;
     }
   }
   else	// Heater Disabled or Outside the percentage limits of the cycle
   {
     icase = 19;
-    heaterHardwareStateUpperRear = false;
+    heaterHardwareStateUpperRear = relayStateOff;
   }
 }
 
@@ -410,7 +356,7 @@ void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
   float tempC;
   uint16_t icase = 0;  // For case debug
 
-  heaterHardwareStateLowerFront = false;
+  heaterHardwareStateLowerFront = relayStateOff;
   if ((heaterParmsLowerFront.enabled == true) &&
       (currentCounterTimer >= heaterCountsOnLowerFront) &&
       (currentCounterTimer <= heaterCountsOffLowerFront))
@@ -421,32 +367,32 @@ void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
     if ((heaterCoolDownStateLowerFront == false) && (tempC < (float)heaterParmsLowerFront.tempSetPointHighOff))
     {
       icase = 21;
-      heaterHardwareStateLowerFront = true;
+      heaterHardwareStateLowerFront = relayStateOn;
     }
     // If not in cool down and greater than High Set Point turn off heater and set cool down
     else if ((heaterCoolDownStateLowerFront == false) && (tempC >= (float)heaterParmsLowerFront.tempSetPointHighOff))
     {
       icase = 22;
       heaterCoolDownStateLowerFront = true;
-      heaterHardwareStateLowerFront = false;
+      heaterHardwareStateLowerFront = relayStateOff;
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
     else if ((heaterCoolDownStateLowerFront == true) && (tempC <= (float)heaterParmsLowerFront.tempSetPointLowOn))
     {
       icase = 23;
       heaterCoolDownStateLowerFront = false;
-      heaterHardwareStateLowerFront = true;
+      heaterHardwareStateLowerFront = relayStateOn;
     }
     else // In cool down but have not reached the Low Set Point
     {
       icase = 24;
-      heaterHardwareStateLowerFront = false;
+      heaterHardwareStateLowerFront = relayStateOff;
     }
   }
   else	// Heater Disabled or Outside the percentage limits of the cycle
   {
     icase = 29;
-    heaterHardwareStateLowerFront = false;
+    heaterHardwareStateLowerFront = relayStateOff;
   }
 }
 
@@ -455,7 +401,7 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
   float tempC;
   uint16_t icase = 0;  // For case debug
 
-  heaterHardwareStateLowerRear = false;
+  heaterHardwareStateLowerRear = relayStateOff;
   if ((heaterParmsLowerRear.enabled == true) &&
       (currentCounterTimer >= heaterCountsOnLowerRear) &&
       (currentCounterTimer <= heaterCountsOffLowerRear))
@@ -466,32 +412,32 @@ void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
     if ((heaterCoolDownStateLowerRear == false) && (tempC < (float)heaterParmsLowerRear.tempSetPointHighOff))
     {
       icase = 31;
-      heaterHardwareStateLowerRear = true;
+      heaterHardwareStateLowerRear = relayStateOn;
     }
     // If not in cool down and greater than High Set Point turn off heater and set cool down
     else if ((heaterCoolDownStateLowerRear == false) && (tempC >= (float)heaterParmsLowerRear.tempSetPointHighOff))
     {
       icase = 32;
       heaterCoolDownStateLowerRear = true;
-      heaterHardwareStateLowerRear = false;
+      heaterHardwareStateLowerRear = relayStateOff;
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
     else if ((heaterCoolDownStateLowerRear == true) && (tempC <= (float)heaterParmsLowerRear.tempSetPointLowOn))
     {
       icase = 33;
       heaterCoolDownStateLowerRear = false;
-      heaterHardwareStateLowerRear = true;
+      heaterHardwareStateLowerRear = relayStateOn;
     }
     else // In cool down but have not reached the Low Set Point
     {
       icase = 34;
-      heaterHardwareStateLowerRear = false;
+      heaterHardwareStateLowerRear = relayStateOff;
     }
   }
   else	// Heater Disabled or Outside the percentage limits of the cycle
   {
     icase = 39;
-    heaterHardwareStateLowerRear = false;
+    heaterHardwareStateLowerRear = relayStateOff;
   }
 }
 
@@ -552,6 +498,13 @@ void HeaterTimerInterrupt()
   }
 }
 
+void initializeRelayPin(uint8_t pin)
+{
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, LOW);
+  relayDriverInit(pin, relayStateOff);  
+}
+
 //------------------------------------------
 // Setup Routines
 //------------------------------------------
@@ -568,26 +521,19 @@ void setup()
   Timer1.disablePwm(10);
   Timer1.attachInterrupt(HeaterTimerInterrupt);
 
-  relayDriverInit();
-
   // Setup Cooling Fan as Output and Turn Off
-  pinMode(COOLING_FAN_SIGNAL, OUTPUT);
-  digitalWrite(COOLING_FAN_SIGNAL, LOW);
+  initializeRelayPin(COOLING_FAN_SIGNAL);
 
   // Setup Heater Enables as Outputs and Turn Off
-  pinMode(HEATER_ENABLE_UPPER_FRONT, OUTPUT);
-  digitalWrite(HEATER_ENABLE_UPPER_FRONT, LOW);
-  pinMode(HEATER_ENABLE_UPPER_REAR, OUTPUT);
-  digitalWrite(HEATER_ENABLE_UPPER_REAR, LOW);
-  pinMode(HEATER_ENABLE_LOWER_FRONT, OUTPUT);
-  digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
-  pinMode(HEATER_ENABLE_LOWER_REAR, OUTPUT);
-  digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);
+  initializeRelayPin(HEATER_ENABLE_UPPER_FRONT);
+  initializeRelayPin(HEATER_ENABLE_UPPER_REAR);
+  initializeRelayPin(HEATER_ENABLE_LOWER_FRONT);
+  initializeRelayPin(HEATER_ENABLE_LOWER_REAR);
 
-  pinMode(HEATER_UPPER_FRONT_DLB, OUTPUT);
-  digitalWrite(HEATER_UPPER_FRONT_DLB, LOW);
-  pinMode(HEATER_UPPER_REAR_DLB, OUTPUT);
-  digitalWrite(HEATER_UPPER_REAR_DLB, LOW);
+  // Setup triac DLB relays
+  initializeRelayPin(HEATER_UPPER_FRONT_DLB);
+  initializeRelayPin(HEATER_UPPER_REAR_DLB);
+
   pinMode(TEN_V_ENABLE, OUTPUT);
   digitalWrite(TEN_V_ENABLE, LOW);
   pinMode(BOOST_ENABLE, OUTPUT);
@@ -606,7 +552,7 @@ void setup()
   if (poStateMachine.isInState(stateStandby) ||
       poStateMachine.isInState(stateCoolDown))
   {
-    poStateMachine.transitionTo(stateHeatCycle);
+    poStateMachine.transitionTo(stateTurnOnDlb);
   }
   else
   {
@@ -870,6 +816,7 @@ void loop()
 
   }
 
+
   poStateMachine.update();
 
   adcReadRun();
@@ -879,6 +826,7 @@ void loop()
   boostEnable(relayBoostRun);
   relayDriverRun();
   handleRelayWatchdog();
+
 }
 
 bool CharValidDigit(unsigned char digit)
@@ -934,6 +882,7 @@ uint16_t GetInputValue()
 void stateStandbyEnter()
 {
   Serial.println("stateStandbyEnter");
+  digitalWrite(TEN_V_ENABLE, LOW);
 }
 
 void stateStandbyUpdate()
@@ -945,6 +894,30 @@ void stateStandbyUpdate()
 void stateStandbyExit()
 {
   Serial.println("SX");
+}
+
+/*
+   State Machine stateTurnOnDlb
+*/
+//State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
+void stateTurnOnDlbEnter(void)
+{
+  Serial.println("Entering stateTurnOnDlb.");
+  digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
+  CoolingFanControl(true);
+}
+
+void stateTurnOnDlbUpdate(void)
+{
+  if (l2DlbIsOn())
+  {
+    poStateMachine.transitionTo(stateHeatCycle);
+  }
+}
+
+void stateTurnOnDlbExit(void)
+{
+  Serial.println("Exiting stateTurnOnDlb.");
 }
 
 //------------------------------------------
@@ -960,10 +933,8 @@ void stateHeatCycleEnter()
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   timer1Counter = 0;
 
-  digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
-  CoolingFanControl(true);
 }
 
 void stateHeatCycleUpdate()

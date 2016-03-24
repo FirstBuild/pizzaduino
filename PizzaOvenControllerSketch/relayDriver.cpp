@@ -26,13 +26,53 @@
 #include <stdint.h>
 #include "CircularBuffer.h"
 
-static CircularBuffer<uint8_t, 10> relaysToTurnOn; 
-static CircularBuffer<uint8_t, 10> relaysToTurnOff; 
+#define NUMBER_OF_RELAYS 8
+
+static CircularBuffer<uint8_t, NUMBER_OF_RELAYS> relaysToTurnOn;
+static CircularBuffer<uint8_t, NUMBER_OF_RELAYS> relaysToTurnOff;
+
+typedef struct Relay
+{
+  uint8_t pin;
+  RelayState desiredState;
+  bool actionCompleted;
+} Relay;
+
+static Relay relay[NUMBER_OF_RELAYS];
+static uint8_t lastRelay = 0;
 
 #define RELAY_OPERATION_DELAY_MS 211
 
-void relayDriverInit(void)
+static uint8_t getIndexOfRelay(uint8_t pin)
 {
+  uint8_t index = 0;
+  uint8_t i;
+
+  for (i = 0; i < lastRelay; i++)
+  {
+    if (relay[i].pin == pin)
+    {
+      index = i;
+      break;
+    }
+  }
+
+  return index;
+}
+
+static void setRelayActionComplete(uint8_t pin)
+{
+  uint8_t index = getIndexOfRelay(pin);
+  relay[index].actionCompleted = true;
+}
+
+void relayDriverInit(uint8_t pin, RelayState relayState)
+{
+  relay[lastRelay].pin = pin;
+  relay[lastRelay].desiredState = relayState;
+  relay[lastRelay].actionCompleted = true;
+
+  lastRelay++;
 }
 
 void relayDriverRun(void)
@@ -52,6 +92,7 @@ void relayDriverRun(void)
 //        Serial.print(pin);
 //        Serial.println(" off.");
         digitalWrite(pin, LOW);
+        setRelayActionComplete(pin);
         oldTime = newTime;
       }
       else if (relaysToTurnOn.remain() > 0)
@@ -62,6 +103,7 @@ void relayDriverRun(void)
 //        Serial.print(pin);
 //        Serial.println(" on.");
         digitalWrite(pin, HIGH);
+        setRelayActionComplete(pin);
         oldTime = newTime;
       }
     }
@@ -72,9 +114,9 @@ void relayDriverRun(void)
   }
 }
 
-void changeRelayState(uint8_t pin, RelayState relayState)
+static void addRelayToChangeList(uint8_t pin, RelayState desiredState)
 {
-  switch(relayState)
+  switch (desiredState)
   {
     case relayStateOn:
 //      Serial.print("Staging relay ");
@@ -82,13 +124,30 @@ void changeRelayState(uint8_t pin, RelayState relayState)
 //      Serial.println(" on.");
       relaysToTurnOn.push(pin);
       break;
-      
+
     case relayStateOff:
 //      Serial.print("Staging relay ");
 //      Serial.print(pin);
 //      Serial.println(" off.");
       relaysToTurnOff.push(pin);
       break;
+  }
+}
+
+void changeRelayState(uint8_t pin, RelayState desiredState)
+{
+  uint8_t index = getIndexOfRelay(pin);
+  RelayState currentState = relayStateOff;
+
+  relay[index].desiredState = desiredState;
+  if (digitalRead(relay[index].pin) == HIGH)
+  {
+    currentState = relayStateOn;
+  }
+  if ((currentState != desiredState) && (relay[index].actionCompleted == true))
+  {
+    relay[index].actionCompleted = false;
+    addRelayToChangeList(pin, desiredState);
   }
 }
 

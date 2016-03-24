@@ -31,7 +31,7 @@ typedef enum RelayState
   relayStateOn
 } RelayState;
 
-void relayDriverInit(void);
+void relayDriverInit(uint8_t pin, RelayState relayState);
 void relayDriverRun(void);
 void changeRelayState(uint8_t pin, RelayState relayState);
 
