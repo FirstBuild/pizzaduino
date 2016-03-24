@@ -20,18 +20,17 @@
   THE SOFTWARE.
 */
 
-// Pizza Oven - Arduino/Read Bear Labs Blend Micro Project
+// Pizza Oven Project
 
-//#include <SPI.h>
-//#include "Boards.h"
 #include "FiniteStateMachine.h"
 #include "TimerOne.h"
 #include "EEPROM.h"
-//#include "ThermoCoupleInterpolate.h"
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
-#include "ac_input.h"
-#include "adc_read.h"
+#include "acInput.h"
+#include "adcRead.h"
+#include "pinDefinitions.h"
+#include "relayBoost.h"
 
 //------------------------------------------
 // Macros
@@ -46,31 +45,13 @@
 
 // For now just check cool down on fan
 #define COOL_DOWN_EXIT_FAN_TEMP				((float)38.0)  // 100 degrees F
-#define COOL_DOWN_EXIT_HEATER_TEMP			((float)65.0)  // 150 degrees F
-
-// Pin Definitions
-#define COOLING_FAN_SIGNAL 				(12)
-
-#define HEATER_ENABLE_UPPER_FRONT		(A1)
-#define HEATER_ENABLE_UPPER_REAR		(A0)
-#define HEATER_ENABLE_LOWER_FRONT		(10)
-#define HEATER_ENABLE_LOWER_REAR		(11)
-
-#define HEATER_UPPER_FRONT_DLB (8) //Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_UPPER_REAR_DLB (9)  //Relay that provides L1 to the triac, must be ON for heat
-
-#define TEN_V_ENABLE (2) //Enable signal to turn on the 10V power supply that is the hold voltage for relays
-#define BOOST_ENABLE (7) //Enable 15V pull in voltage for relays
-#define RELAY_WATCHDOG (6) //Signal must toggle at a rate of X Hz in order to enable relays
-#define VOLTAGE_DETECT (5) //Used to determine supply voltage as 208VAC or 240VAC
-#define POWER_SWITCH_AC_INPUT (3) //AC Input that indicates the state of the power switch
-#define DLB_STATUS_AC_INPUT (4) //AC Intput that indicates the status of the L2 panel mount DLB relays
+#define COOL_DOWN_EXIT_HEATER_TEMP		((float)65.0)  // 150 degrees F
 
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
-#define TIMER1_PERIOD_CLOCK_FACTOR		(1) 		// Clock multiplier for Timer1
-#define TIMER1_COUNTER_WRAP				(1000)      // Count down for a period of 1 second
-#define TIMER1_OUTPUT_TEMP_PERIODIC     (1000)       // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
+#define TIMER1_PERIOD_CLOCK_FACTOR	(1) 		// Clock multiplier for Timer1
+#define TIMER1_COUNTER_WRAP				  (1000)  // Count down for a period of 1 second
+#define TIMER1_OUTPUT_TEMP_PERIODIC (1000)  // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
 
 //------------------------------------------
 //state machine setup
@@ -78,19 +59,23 @@
 void stateStandbyEnter();
 void stateStandbyUpdate();
 void stateStandbyExit();
+State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
+
+//void stateTurnOnDlbEnter();
+//void stateTurnOnDlbUpdate();
+//void stateTurnOnDlbExit();
+//State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
 
 void stateHeatCycleEnter();
 void stateHeatCycleUpdate();
 void stateHeatCycleExit();
+State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
 
 void stateCoolDownEnter();
 void stateCoolDownUpdate();
 void stateCoolDownExit();
+State stateCoolDown = State(stateCoolDownEnter, stateCoolDownUpdate, stateCoolDownExit);
 
-State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
-State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
-State stateCoolDown = State(stateCoolDownEnter,
-                            stateCoolDownUpdate, stateCoolDownExit);
 FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
 
 //------------------------------------------
@@ -230,19 +215,15 @@ void UpdateHeaterHardware()
   if (heaterHardwareStateLowerFront == false)
     digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
   else {
-    digitalWrite(BOOST_ENABLE, HIGH); //Turn off Boost
+    boostEnable(relayBoostOn);
     digitalWrite(HEATER_ENABLE_LOWER_FRONT, HIGH);
-    //delay(1);
-    digitalWrite(BOOST_ENABLE, LOW); //Turn off Boost
   }
 
   if (heaterHardwareStateLowerRear == false)
     digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);
   else {
-    digitalWrite(BOOST_ENABLE, HIGH); //Turn off Boost
+    boostEnable(relayBoostOn);
     digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);
-    //delay(1);
-    digitalWrite(BOOST_ENABLE, LOW); //Turn off Boost
   }
 }
 
@@ -484,28 +465,24 @@ void PeriodicOutputTemps()
     intTempCUR =  (uint16_t) (thermocoupleUpperRear  + 0.5);
     intTempCLF =  (uint16_t) (thermocoupleLowerFront + 0.5);
     intTempCLR =  (uint16_t) (thermocoupleLowerRear  + 0.5);
-//    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
+    //    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
     intTempCFan = getA2DReadingForPin(ANALOG_THERMO_FAN);
 
-    strLen = sprintf(formatStr, "Temps %d %d %d %d %d\n",
-                     intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan);
-    if (strLen > 0)
-      Serial.write((byte *)&formatStr, strLen);
+    Serial.print("Temps ");
+    Serial.print(intTempCUF);
+    Serial.print(" ");
+    Serial.print(intTempCUR);
+    Serial.print(" ");
+    Serial.print(intTempCLF);
+    Serial.print(" ");
+    Serial.print(intTempCLR);
+    Serial.print(" ");
+    Serial.println(intTempCFan);
 
-    Serial.print("AC1: ");
-    Serial.print(getAcInputOne());
-    Serial.print(", AC2: ");
-    Serial.println(getAcInputTwo());
-
-#if 0
-    uint16_t a2DRawUF = analogRead(ANALOG_THERMO_UPPER_FRONT);
-    uint16_t VUF =  (uint16_t) (AnalogTCVolts(a2DRawUF) * 1000.0);
-
-    strLen = sprintf(formatStr, "RAW A2D %d V %d\n",
-                     a2DRawUF, VUF);
-    if (strLen > 0)
-      ble_write_bytes((byte *)&formatStr, strLen);
-#endif
+    Serial.print("Power ");
+    Serial.print(powerButtonIsOn());
+    Serial.print(" L2DLB ");
+    Serial.println(l2DlbIsOn());
   }
 }
 
@@ -572,11 +549,11 @@ void setup()
   pinMode(RELAY_WATCHDOG, OUTPUT);
 
   // Initialize the A2D engine
-  adc_read_init(ANALOG_THERMO_UPPER_FRONT);
-  adc_read_init(ANALOG_THERMO_UPPER_REAR);
-  adc_read_init(ANALOG_THERMO_LOWER_FRONT);
-  adc_read_init(ANALOG_THERMO_LOWER_REAR);
-  adc_read_init(ANALOG_THERMO_FAN);
+  adcReadInit(ANALOG_THERMO_UPPER_FRONT);
+  adcReadInit(ANALOG_THERMO_UPPER_REAR);
+  adcReadInit(ANALOG_THERMO_LOWER_FRONT);
+  adcReadInit(ANALOG_THERMO_LOWER_REAR);
+  adcReadInit(ANALOG_THERMO_FAN);
 
   ConvertHeaterPercentCounts();
   Serial.println("Start");
@@ -589,18 +566,6 @@ void setup()
   {
     Serial.println("Invalid");
   }
-
-  // Default pins set to 9 and 8 for REQN and RDYN
-  // Set your REQN and RDYN here before ble_begin() if you need
-  //ble_set_pins(3, 2);
-
-  // Set your BLE Shield name here, max. length 10
-  //  ble_set_name((char*)&"Pizza Oven");
-
-  // Init. and start BLE library.
-  //ble_begin();
-
-  //useInterrupt(true);
 }
 
 void handleRelayWatchdog(void)
@@ -618,7 +583,6 @@ void handleRelayWatchdog(void)
 //------------------------------------------
 // Main Loop
 //------------------------------------------
-static byte buf_len = 0;
 byte queryDone = false;
 uint32_t liveCount = 0;
 uint16_t inputValue;
@@ -626,9 +590,11 @@ uint16_t tempMultiply, tempPercent, tempTemp;
 
 void loop()
 {
-#ifdef KILL
   char formatStr[25];
   uint16_t strLen;
+  uint16_t i;
+  static uint32_t oldTime = millis();
+  uint32_t newTime = millis();
 
   // Process Blue Tooth Command if available
   // TBD ble_available returns -1 if nothing available
@@ -642,12 +608,12 @@ void loop()
     switch (cmd)
     {
       case 'v': // query protocol version
-        strLen = sprintf(formatStr, "V %u.%u bugfix %u\n",
-                         (uint16_t)PROTOCOL_MAJOR_VERSION, (uint16_t)PROTOCOL_MINOR_VERSION, (uint16_t)PROTOCOL_BUGFIX_VERSION);
-        if (strLen > 0)
-        {
-          Serial.write(formatStr);
-        }
+        Serial.print("V ");
+        Serial.print(PROTOCOL_MAJOR_VERSION);
+        Serial.print(".");
+        Serial.print(PROTOCOL_MINOR_VERSION);
+        Serial.print(" bugfix ");
+        Serial.println(PROTOCOL_BUGFIX_VERSION);
         break;
 
 #ifdef KILL
@@ -860,16 +826,15 @@ void loop()
     }
 
   }
-#endif
+
   //  poStateMachine.update();
 
-  buf_len = 0;
-  readThermocouples();
-  handleRelayWatchdog();
-  runAcInputs();
-  adc_read_run();
-  PeriodicOutputTemps();
-
+  //  adcReadRun();
+  //  readThermocouples();
+  //  handleRelayWatchdog();
+  //  runAcInputs();
+  //  PeriodicOutputTemps();
+  boostEnable(relayBoostRun);
 }
 
 bool CharValidDigit(unsigned char digit)
@@ -952,14 +917,10 @@ void stateHeatCycleEnter()
   timer1Counter = 0;
 
   digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
-  digitalWrite(BOOST_ENABLE, HIGH); //Turn on Boost
-  //delay(1);
+  boostEnable(relayBoostOn);
   digitalWrite(HEATER_UPPER_FRONT_DLB, HIGH);
   digitalWrite(HEATER_UPPER_REAR_DLB, HIGH);
   CoolingFanControl(true);
-  //delay(1);
-  digitalWrite(BOOST_ENABLE, LOW); //Turn off Boost
-
 }
 
 void stateHeatCycleUpdate()

@@ -1,8 +1,8 @@
 /*
-  thermocouple.h
-
-  Read the thermocouple
-
+  ac_input.h
+  
+  Read the AC inputs
+  
   Copyright (c) 2015 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,17 +23,21 @@
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
 
-*/
-#ifndef THERMOCOUPLE_H
-#define THERMOCOUPLE_H
+ */
+
+#ifndef AC_INPUT_H
+#define AC_INPUT_H
 
 #include <stdint.h>
-#include "Arduino.h"
-#include "pinDefinitions.h"
 
-// Thermocouple Definitions
-#define ANALOG_REFERENCE_VOLTAGE    ((double)5.0)
+// Call setupAcInputs in the setup function to initialize.
+void setupAcInputs(void);
 
-float readAD8495KTC(uint8_t pin);
+// Call runAcInputs from the loop function.
+void runAcInputs(void);
+
+// Call the get functions to get the status of the AC inputs
+bool powerButtonIsOn(void);
+bool l2DlbIsOn(void);
 
 #endif

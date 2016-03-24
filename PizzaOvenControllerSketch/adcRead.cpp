@@ -1,12 +1,33 @@
 /*
-   adc_read.c
+  adc_read.c
 
-   Manage reading ADC channels without blocking.
+  Manage reading ADC channels without blocking.
+
+  Copyright (c) 2015 FirstBuild
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  THE SOFTWARE.
+
 */
 
 #include <Arduino.h>
 #include <wiring_private.h>
-#include "adc_read.h"
+#include "adcRead.h"
 
 #define MAX_CHANNELS 8
 
@@ -22,7 +43,7 @@ enum {
 
 static uint8_t a2dState = a2d_idle;
 
-void adc_read_init(uint8_t pin)
+void adcReadInit(uint8_t pin)
 {
   pin = pin - 14;
   Serial.print("Setting pin ");
@@ -31,7 +52,7 @@ void adc_read_init(uint8_t pin)
   pinToRead[pin] = true;
 }
 
-bool itIsTimeToStartScanning(void)
+static bool itIsTimeToStartScanning(void)
 {
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
@@ -46,7 +67,7 @@ bool itIsTimeToStartScanning(void)
   return retval;
 }
 
-void adc_read_run(void)
+void adcReadRun(void)
 {
   uint8_t low, high;
   

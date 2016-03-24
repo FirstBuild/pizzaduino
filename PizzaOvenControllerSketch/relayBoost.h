@@ -1,8 +1,4 @@
 /*
-  thermocouple.h
-
-  Read the thermocouple
-
   Copyright (c) 2015 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,18 +18,16 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
-
 */
-#ifndef THERMOCOUPLE_H
-#define THERMOCOUPLE_H
 
-#include <stdint.h>
-#include "Arduino.h"
-#include "pinDefinitions.h"
+#ifndef RELAY_BOOST_H
+#define RELAY_BOOST_H
 
-// Thermocouple Definitions
-#define ANALOG_REFERENCE_VOLTAGE    ((double)5.0)
+typedef enum RelayBoostMode {
+  relayBoostOn,
+  relayBoostRun
+} RelayBoostMode;
 
-float readAD8495KTC(uint8_t pin);
+void boostEnable(RelayBoostMode);
 
 #endif
