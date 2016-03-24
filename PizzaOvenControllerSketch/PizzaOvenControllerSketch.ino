@@ -31,6 +31,7 @@
 #include "adcRead.h"
 #include "pinDefinitions.h"
 #include "relayBoost.h"
+#include "relayDriver.h"
 
 //------------------------------------------
 // Macros
@@ -202,28 +203,62 @@ void ConvertHeaterPercentCounts()
 
 void UpdateHeaterHardware()
 {
-  if (heaterHardwareStateUpperFront == false)
-    digitalWrite(HEATER_ENABLE_UPPER_FRONT, LOW);
-  else
-    digitalWrite(HEATER_ENABLE_UPPER_FRONT, HIGH);
+  static bool lastheaterHardwareStateUpperFront = !heaterHardwareStateUpperFront;
+  static bool lastheaterHardwareStateUpperRear = !heaterHardwareStateUpperRear;
+  static bool lastheaterHardwareStateLowerFront = !heaterHardwareStateLowerFront;
+  static bool lastheaterHardwareStateLowerRear = !heaterHardwareStateLowerRear;
 
-  if (heaterHardwareStateUpperRear == false)
-    digitalWrite(HEATER_ENABLE_UPPER_REAR, LOW);
-  else
-    digitalWrite(HEATER_ENABLE_UPPER_REAR, HIGH);
-
-  if (heaterHardwareStateLowerFront == false)
-    digitalWrite(HEATER_ENABLE_LOWER_FRONT, LOW);
-  else {
-    boostEnable(relayBoostOn);
-    digitalWrite(HEATER_ENABLE_LOWER_FRONT, HIGH);
+  if (heaterHardwareStateUpperFront != lastheaterHardwareStateUpperFront)
+  {
+    if (heaterHardwareStateUpperFront == false)
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
+    }
+    else
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
+    }
+    lastheaterHardwareStateUpperFront = heaterHardwareStateUpperFront;
   }
 
-  if (heaterHardwareStateLowerRear == false)
-    digitalWrite(HEATER_ENABLE_LOWER_REAR, LOW);
-  else {
-    boostEnable(relayBoostOn);
-    digitalWrite(HEATER_ENABLE_LOWER_REAR, HIGH);
+
+  if (heaterHardwareStateUpperRear != lastheaterHardwareStateUpperRear)
+  {
+    if (heaterHardwareStateUpperRear == false)
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
+    }
+    else
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
+    }
+    lastheaterHardwareStateUpperRear = heaterHardwareStateUpperRear;
+  }
+
+  if (heaterHardwareStateLowerFront != lastheaterHardwareStateLowerFront)
+  {
+    if (heaterHardwareStateLowerFront == false)
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
+    }
+    else
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
+    }
+    lastheaterHardwareStateLowerFront = heaterHardwareStateLowerFront;
+  }
+
+  if (heaterHardwareStateLowerRear != lastheaterHardwareStateLowerRear)
+  {
+    if (heaterHardwareStateLowerRear == false)
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOff);
+    }
+    else
+    {
+      changeRelayState(HEATER_ENABLE_UPPER_FRONT, relayStateOn);
+    }
+    lastheaterHardwareStateLowerRear = heaterHardwareStateLowerRear;
   }
 }
 
@@ -244,10 +279,20 @@ void AllHeatersOffStateClear()
 
 void CoolingFanControl(boolean control)
 {
-  if (control == true)
-    digitalWrite(COOLING_FAN_SIGNAL, HIGH);
-  else
-    digitalWrite(COOLING_FAN_SIGNAL, LOW);
+  static bool lastControl = !control;
+
+  if (lastControl != control)
+  {
+    if (control == true)
+    {
+      changeRelayState(COOLING_FAN_SIGNAL, relayStateOn);
+    }
+    else
+    {
+      changeRelayState(COOLING_FAN_SIGNAL, relayStateOn);
+    }
+    lastControl = control;
+  }
 }
 
 float AnalogThermocoupleTemp(uint16_t rawA2D)
@@ -523,6 +568,7 @@ void setup()
   Timer1.disablePwm(10);
   Timer1.attachInterrupt(HeaterTimerInterrupt);
 
+  relayDriverInit();
 
   // Setup Cooling Fan as Output and Turn Off
   pinMode(COOLING_FAN_SIGNAL, OUTPUT);
@@ -592,9 +638,6 @@ void loop()
 {
   char formatStr[25];
   uint16_t strLen;
-  uint16_t i;
-  static uint32_t oldTime = millis();
-  uint32_t newTime = millis();
 
   // Process Blue Tooth Command if available
   // TBD ble_available returns -1 if nothing available
@@ -827,14 +870,15 @@ void loop()
 
   }
 
-  //  poStateMachine.update();
+  poStateMachine.update();
 
-  //  adcReadRun();
-  //  readThermocouples();
-  //  handleRelayWatchdog();
-  //  runAcInputs();
-  //  PeriodicOutputTemps();
+  adcReadRun();
+  readThermocouples();
+  runAcInputs();
+  PeriodicOutputTemps();
   boostEnable(relayBoostRun);
+  relayDriverRun();
+  handleRelayWatchdog();
 }
 
 bool CharValidDigit(unsigned char digit)
@@ -917,9 +961,8 @@ void stateHeatCycleEnter()
   timer1Counter = 0;
 
   digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
-  boostEnable(relayBoostOn);
-  digitalWrite(HEATER_UPPER_FRONT_DLB, HIGH);
-  digitalWrite(HEATER_UPPER_REAR_DLB, HIGH);
+  changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
+  changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
   CoolingFanControl(true);
 }
 
