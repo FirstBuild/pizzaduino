@@ -7,6 +7,7 @@
 #define THERMOCOUPLE_H
 
 #include <stdint.h>
+#include "Arduino.h"
 
 // Thermocouple Definitions
 #define ANALOG_REFERENCE_VOLTAGE    ((double)5.0)

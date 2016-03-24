@@ -31,6 +31,7 @@
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
 #include "ac_input.h"
+#include "adc_read.h"
 
 //------------------------------------------
 // Macros
@@ -474,31 +475,38 @@ void PeriodicOutputTemps()
   char formatStr[25];
   uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan;
 
-  intTempCUF =  (uint16_t) (thermocoupleUpperFront + 0.5);
-  intTempCUR =  (uint16_t) (thermocoupleUpperRear  + 0.5);
-  intTempCLF =  (uint16_t) (thermocoupleLowerFront + 0.5);
-  intTempCLR =  (uint16_t) (thermocoupleLowerRear  + 0.5);
-  intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
+  // Output Periodic Temperatures
+  if (true == outputTempPeriodic)
+  {
+    outputTempPeriodic = false;
 
-  strLen = sprintf(formatStr, "Temps %d %d %d %d %d\n",
-                   intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan);
-  if (strLen > 0)
-    Serial.write((byte *)&formatStr, strLen);
+    intTempCUF =  (uint16_t) (thermocoupleUpperFront + 0.5);
+    intTempCUR =  (uint16_t) (thermocoupleUpperRear  + 0.5);
+    intTempCLF =  (uint16_t) (thermocoupleLowerFront + 0.5);
+    intTempCLR =  (uint16_t) (thermocoupleLowerRear  + 0.5);
+//    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
+    intTempCFan = getA2DReadingForPin(ANALOG_THERMO_FAN);
 
-  Serial.print("AC1: ");
-  Serial.print(getAcInputOne());
-  Serial.print(", AC2: ");
-  Serial.println(getAcInputTwo());
+    strLen = sprintf(formatStr, "Temps %d %d %d %d %d\n",
+                     intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan);
+    if (strLen > 0)
+      Serial.write((byte *)&formatStr, strLen);
+
+    Serial.print("AC1: ");
+    Serial.print(getAcInputOne());
+    Serial.print(", AC2: ");
+    Serial.println(getAcInputTwo());
 
 #if 0
-  uint16_t a2DRawUF = analogRead(ANALOG_THERMO_UPPER_FRONT);
-  uint16_t VUF =  (uint16_t) (AnalogTCVolts(a2DRawUF) * 1000.0);
+    uint16_t a2DRawUF = analogRead(ANALOG_THERMO_UPPER_FRONT);
+    uint16_t VUF =  (uint16_t) (AnalogTCVolts(a2DRawUF) * 1000.0);
 
-  strLen = sprintf(formatStr, "RAW A2D %d V %d\n",
-                   a2DRawUF, VUF);
-  if (strLen > 0)
-    ble_write_bytes((byte *)&formatStr, strLen);
+    strLen = sprintf(formatStr, "RAW A2D %d V %d\n",
+                     a2DRawUF, VUF);
+    if (strLen > 0)
+      ble_write_bytes((byte *)&formatStr, strLen);
 #endif
+  }
 }
 
 //------------------------------------------
@@ -528,7 +536,7 @@ void HeaterTimerInterrupt()
 void setup()
 {
   setupAcInputs();
-  
+
   Serial.begin(9600);
   Serial.println("BLE Arduino Slave");
 
@@ -562,6 +570,13 @@ void setup()
   pinMode(BOOST_ENABLE, OUTPUT);
   digitalWrite(BOOST_ENABLE, LOW);
   pinMode(RELAY_WATCHDOG, OUTPUT);
+
+  // Initialize the A2D engine
+  adc_read_init(ANALOG_THERMO_UPPER_FRONT);
+  adc_read_init(ANALOG_THERMO_UPPER_REAR);
+  adc_read_init(ANALOG_THERMO_LOWER_FRONT);
+  adc_read_init(ANALOG_THERMO_LOWER_REAR);
+  adc_read_init(ANALOG_THERMO_FAN);
 
   ConvertHeaterPercentCounts();
   Serial.println("Start");
@@ -846,12 +861,15 @@ void loop()
 
   }
 #endif
-  poStateMachine.update();
+  //  poStateMachine.update();
 
   buf_len = 0;
   readThermocouples();
   handleRelayWatchdog();
   runAcInputs();
+  adc_read_run();
+  PeriodicOutputTemps();
+
 }
 
 bool CharValidDigit(unsigned char digit)
@@ -966,15 +984,6 @@ void stateHeatCycleUpdate()
 
     lastTimer1Counter = saveTimer1Counter;
   }
-
-#if 1
-  // Output Periodic Temperatures
-  if (true == outputTempPeriodic)
-  {
-    outputTempPeriodic = false;
-    PeriodicOutputTemps();
-  }
-#endif
 }
 
 void stateHeatCycleExit()
@@ -1008,13 +1017,6 @@ void stateCoolDownUpdate()
   {
     CoolingFanControl(false);
     poStateMachine.transitionTo(stateStandby);
-  }
-
-  // Output Periodic Temperatures
-  if (true == outputTempPeriodic)
-  {
-    outputTempPeriodic = false;
-    PeriodicOutputTemps();
   }
 }
 

@@ -7,6 +7,8 @@
 #include <Arduino.h>
 #include "thermocouple.h"
 #include <avr/pgmspace.h>
+#include <wiring_private.h>
+#include "adc_read.h"
 
 static float AnalogTCVolts(uint16_t rawA2D);
 static float AD8495KTCInterpolate(float A2D);
@@ -79,7 +81,7 @@ float readAD8495KTC(uint8_t pin)
 {
   float tempC;
 
-  tempC = AD8495KTCInterpolate(AnalogTCVolts(analogRead(pin)));
+  tempC = AD8495KTCInterpolate(AnalogTCVolts(getA2DReadingForPin(pin)));
 
   return tempC;
   
