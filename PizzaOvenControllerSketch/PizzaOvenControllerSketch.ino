@@ -94,10 +94,15 @@ uint16_t nTimesCycleTime = 4;
 struct HeaterParameters
 {
   boolean enabled;
-  uint16_t tempSetPointLowOn;   // In integer degrees C
-  uint16_t tempSetPointHighOff; // "      "
-  uint16_t onPercent;       // Time when a heater turns on in percent
-  uint16_t offPercent;      // Time when a heater turns off in percent
+  union {
+    struct {
+      uint16_t tempSetPointLowOn;   // In integer degrees C
+      uint16_t tempSetPointHighOff; // "      "
+      uint16_t onPercent;       // Time when a heater turns on in percent
+      uint16_t offPercent;      // Time when a heater turns off in percent
+    };
+    uint16_t parameterArray[4];
+  };
 };
 
 HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80};
@@ -221,6 +226,9 @@ void AllHeatersOffStateClear()
   heaterCoolDownStateLowerRear  = false;
 
   UpdateHeaterHardware();
+
+  changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOff);
+  changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOff);
 }
 
 void CoolingFanControl(boolean control)
@@ -235,7 +243,7 @@ void CoolingFanControl(boolean control)
     }
     else
     {
-      changeRelayState(COOLING_FAN_SIGNAL, relayStateOn);
+      changeRelayState(COOLING_FAN_SIGNAL, relayStateOff);
     }
     lastControl = control;
   }
@@ -502,7 +510,7 @@ void initializeRelayPin(uint8_t pin)
 {
   pinMode(pin, OUTPUT);
   digitalWrite(pin, LOW);
-  relayDriverInit(pin, relayStateOff);  
+  relayDriverInit(pin, relayStateOff);
 }
 
 //------------------------------------------
@@ -549,15 +557,15 @@ void setup()
 
   ConvertHeaterPercentCounts();
   Serial.println("Start");
-  if (poStateMachine.isInState(stateStandby) ||
-      poStateMachine.isInState(stateCoolDown))
-  {
-    poStateMachine.transitionTo(stateTurnOnDlb);
-  }
-  else
-  {
-    Serial.println("Invalid");
-  }
+  //  if (poStateMachine.isInState(stateStandby) ||
+  //      poStateMachine.isInState(stateCoolDown))
+  //  {
+  //    poStateMachine.transitionTo(stateTurnOnDlb);
+  //  }
+  //  else
+  //  {
+  //    Serial.println("Invalid");
+  //  }
 }
 
 void handleRelayWatchdog(void)
@@ -569,6 +577,98 @@ void handleRelayWatchdog(void)
   {
     digitalWrite(RELAY_WATCHDOG, !digitalRead(RELAY_WATCHDOG));
     oldTime = newTime;
+  }
+}
+
+void printHeaterTemperatureParameters(char *pName, uint16_t *pParams)
+{
+  uint8_t i;
+
+  Serial.print(pName);
+  for (i = 0; i < 4; i++)
+  {
+    Serial.print(pParams[i]);
+    Serial.print(" ");
+  }
+  Serial.println("");
+}
+
+#define RECEVIED_COMMAND_BUFFER_LENGTH (16)
+
+void handleIncomingCommands(void)
+{
+  static char receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
+  static uint8_t receivedCommandBufferIndex = 0;
+
+  if (Serial.available() > 0)
+  {
+    receivedCommandBuffer[receivedCommandBufferIndex++] = Serial.read();
+    if (receivedCommandBufferIndex >= RECEVIED_COMMAND_BUFFER_LENGTH)
+    {
+      Serial.println("DEBUG command input buffer exceeded.");
+      receivedCommandBufferIndex = 0;
+    }
+    else
+    {
+      // attempt to parse the command
+      switch (receivedCommandBuffer[0])
+      {
+        case 'v': // query protocol version
+          Serial.print("V ");
+          Serial.print(PROTOCOL_MAJOR_VERSION);
+          Serial.print(".");
+          Serial.print(PROTOCOL_MINOR_VERSION);
+          Serial.print(" bugfix ");
+          Serial.println(PROTOCOL_BUGFIX_VERSION);
+          receivedCommandBufferIndex = 0;
+          break;
+
+        case 'p': // query heat control parameters
+          if (receivedCommandBufferIndex >= 2)
+          {
+            switch (receivedCommandBuffer[1])
+            {
+              case '0' :
+                //              strLen = sprintf(formatStr, "nTimes %u\n",
+                //                               nTimesCycleTime);
+                Serial.print("nTimes ");
+                Serial.println(nTimesCycleTime);
+                break;
+              case '1' :
+                printHeaterTemperatureParameters("UF ", heaterParmsUpperFront.parameterArray);
+                break;
+              case '2' :
+                printHeaterTemperatureParameters("UR ", heaterParmsUpperRear.parameterArray);
+                break;
+              case '3' :
+                printHeaterTemperatureParameters("LF ", heaterParmsLowerFront.parameterArray);
+                break;
+              case '4' :
+                printHeaterTemperatureParameters("LR ", heaterParmsLowerRear.parameterArray);
+                break;
+              default:
+                Serial.print("DEBUG unknown command received for the 'p' command: ");
+                Serial.println(receivedCommandBuffer[1]);
+                break;
+            }
+
+            receivedCommandBufferIndex = 0;
+          }
+          break;
+
+        case 10:
+        case 13:
+          // ignore cr/lf as a command
+          receivedCommandBufferIndex = 0;
+          break;
+
+        default:
+          Serial.print("DEBUG unknown command received: ");
+          Serial.println(receivedCommandBuffer[0]);
+          receivedCommandBufferIndex = 0;
+          break;
+      }
+    }
   }
 }
 
@@ -585,6 +685,8 @@ void loop()
   char formatStr[25];
   uint16_t strLen;
 
+#ifdef KILL
+
   // Process Blue Tooth Command if available
   // TBD ble_available returns -1 if nothing available
   if (Serial.available() > 0)
@@ -596,227 +698,178 @@ void loop()
     // Parse data here
     switch (cmd)
     {
-      case 'v': // query protocol version
-        Serial.print("V ");
-        Serial.print(PROTOCOL_MAJOR_VERSION);
-        Serial.print(".");
-        Serial.print(PROTOCOL_MINOR_VERSION);
-        Serial.print(" bugfix ");
-        Serial.println(PROTOCOL_BUGFIX_VERSION);
-        break;
 
-#ifdef KILL
-      case 'p': // query heat control parameters
-        if (Serial.available() >= 1)
-        {
-          cmd = Serial.read();
-          //Serial.write(cmd);
+      //case 's':	// Start Pizza Oven Cycle
 
-          switch (cmd)
-          {
-            case '0' :
-              strLen = sprintf(formatStr, "nTimes %u\n",
-                               nTimesCycleTime);
-              break;
-            case '1' :
-              strLen = sprintf(formatStr, "UF %u %u %u %u\n",
-                               heaterParmsUpperFront.tempSetPointLowOn, heaterParmsUpperFront.tempSetPointHighOff,
-                               heaterParmsUpperFront.onPercent, heaterParmsUpperFront.offPercent);
-              break;
-            case '2' :
-              strLen = sprintf(formatStr, "UR %u %u %u %u\n",
-                               heaterParmsUpperRear.tempSetPointLowOn, heaterParmsUpperRear.tempSetPointHighOff,
-                               heaterParmsUpperRear.onPercent, heaterParmsUpperRear.offPercent);
-              break;
-            case '3' :
-              strLen = sprintf(formatStr, "LF %u %u %u %u\n",
-                               heaterParmsLowerFront.tempSetPointLowOn, heaterParmsLowerFront.tempSetPointHighOff,
-                               heaterParmsLowerFront.onPercent, heaterParmsLowerFront.offPercent);
-              break;
-            case '4' :
-              strLen = sprintf(formatStr, "LR %u %u %u %u\n",
-                               heaterParmsLowerRear.tempSetPointLowOn, heaterParmsLowerRear.tempSetPointHighOff,
-                               heaterParmsLowerRear.onPercent, heaterParmsLowerRear.offPercent);
-              break;
-            default:
-              ;
-          }
 
-          if (strLen > 0)
-          {
-            Serial.write(formatStr);
-          }
+      /*
           break;
 
-          //case 's':	// Start Pizza Oven Cycle
-
-
-          /*
-              break;
-
-            case 'q':	// Quit Pizza Oven Cycle
-            Serial.println("Exit");
-            if(poStateMachine.isInState(stateHeatCycle))
-            {
-          	poStateMachine.transitionTo(stateCoolDown);
-            }
-            else
-            {
-          	Serial.println("Invalid");
-            }
-              break;
-
-            case 'l':	// Set Lower Set Point Parameter
-            Serial.println("Set Lower Set Point Parameter");
-            if(ble_available() > 2)
-            {
-              cmd = ble_read();
-          	Serial.write(cmd);
-
-          	// TBD Validate Range
-          	switch(cmd)
-          	{
-          	case '1' :
-          		heaterParmsUpperFront.tempSetPointLowOn = GetInputValue();
-          		break;
-          	case '2' :
-          		heaterParmsUpperRear.tempSetPointLowOn = GetInputValue();
-          		break;
-          	case '3' :
-          		heaterParmsLowerFront.tempSetPointLowOn = GetInputValue();
-          		break;
-          	case '4' :
-          		heaterParmsLowerRear.tempSetPointLowOn = GetInputValue();
-          		break;
-          	default :
-          		;
-          	}
-            }
-              break;
-
-            case 'u':	// Set Upper Set Point Parameter
-            Serial.println("Set Upper Set Point Parameter");
-            if(ble_available() > 2)
-            {
-              cmd = ble_read();
-          	Serial.write(cmd);
-
-          	// TBD Validate Range
-          	switch(cmd)
-          	{
-          	case '1' :
-          		heaterParmsUpperFront.tempSetPointHighOff = GetInputValue();
-          		break;
-          	case '2' :
-          		heaterParmsUpperRear.tempSetPointHighOff = GetInputValue();
-          		break;
-          	case '3' :
-          		heaterParmsLowerFront.tempSetPointHighOff = GetInputValue();
-          		break;
-          	case '4' :
-          		heaterParmsLowerRear.tempSetPointHighOff = GetInputValue();
-          		break;
-          	default :
-          		;
-          	}
-            }
-              break;
-
-            case 'n':	// Set On Percent Parameter
-            Serial.println("Set On Percent Parameter");
-            if(ble_available() > 2)
-            {
-              cmd = ble_read();
-          	Serial.write(cmd);
-
-          	// TBD Validate Range
-          	switch(cmd)
-          	{
-          	case '1' :
-          		heaterParmsUpperFront.onPercent = GetInputValue();
-          		break;
-          	case '2' :
-          		heaterParmsUpperRear.onPercent = GetInputValue();
-          		break;
-          	case '3' :
-          		heaterParmsLowerFront.onPercent = GetInputValue();
-          		break;
-          	case '4' :
-          		heaterParmsLowerRear.onPercent = GetInputValue();
-          		break;
-          	default :
-          		;
-          	}
-            }
-              break;
-
-            case 'f':	// Set Off Percent Parameter
-            Serial.println("Set Off Percent Parameter");
-            if(ble_available() > 2)
-            {
-              cmd = ble_read();
-          	Serial.write(cmd);
-
-          	// TBD Validate Range
-          	switch(cmd)
-          	{
-          	case '1' :
-          		heaterParmsUpperFront.offPercent = GetInputValue();
-          		break;
-          	case '2' :
-          		heaterParmsUpperRear.offPercent = GetInputValue();
-          		break;
-          	case '3' :
-          		heaterParmsLowerFront.offPercent = GetInputValue();
-          		break;
-          	case '4' :
-          		heaterParmsLowerRear.offPercent = GetInputValue();
-          		break;
-          	default :
-          		;
-          	}
-            }
-              break;
-
-            case 't':	// Set Time Multiplier Minutes
-            	if(poStateMachine.isInState(stateStandby) ||
-          	poStateMachine.isInState(stateCoolDown))
-            {
-          	Serial.println("Set Time Period Cycle Seconds");
-          	if(ble_available() >= 1)
-          	{
-          		tempMultiply = GetInputValue();
-          		if((tempMultiply > 0) && (tempMultiply <= 30))
-          		{
-          			nTimesCycleTime = tempMultiply;
-          			ConvertHeaterPercentCounts();
-          		}
-          		else
-          		{
-            //		    		ble_write_bytes((byte *)"Invalid n", 9);
-              		Serial.println("Invalid n");
-              	}
-            	}
-            }
-            else
-            {
-            //    		ble_write_bytes((byte *)"Invalid Heat", 12);
-          		Serial.println("Invalid Heat");
-          	}
-            break;
-
-            default:
-            ;
-          	}
-            }
-          */
+        case 'q':	// Quit Pizza Oven Cycle
+        Serial.println("Exit");
+        if(poStateMachine.isInState(stateHeatCycle))
+        {
+      	poStateMachine.transitionTo(stateCoolDown);
         }
-#endif
-    }
+        else
+        {
+      	Serial.println("Invalid");
+        }
+          break;
 
+        case 'l':	// Set Lower Set Point Parameter
+        Serial.println("Set Lower Set Point Parameter");
+        if(ble_available() > 2)
+        {
+          cmd = ble_read();
+      	Serial.write(cmd);
+
+      	// TBD Validate Range
+      	switch(cmd)
+      	{
+      	case '1' :
+      		heaterParmsUpperFront.tempSetPointLowOn = GetInputValue();
+      		break;
+      	case '2' :
+      		heaterParmsUpperRear.tempSetPointLowOn = GetInputValue();
+      		break;
+      	case '3' :
+      		heaterParmsLowerFront.tempSetPointLowOn = GetInputValue();
+      		break;
+      	case '4' :
+      		heaterParmsLowerRear.tempSetPointLowOn = GetInputValue();
+      		break;
+      	default :
+      		;
+      	}
+        }
+          break;
+
+        case 'u':	// Set Upper Set Point Parameter
+        Serial.println("Set Upper Set Point Parameter");
+        if(ble_available() > 2)
+        {
+          cmd = ble_read();
+      	Serial.write(cmd);
+
+      	// TBD Validate Range
+      	switch(cmd)
+      	{
+      	case '1' :
+      		heaterParmsUpperFront.tempSetPointHighOff = GetInputValue();
+      		break;
+      	case '2' :
+      		heaterParmsUpperRear.tempSetPointHighOff = GetInputValue();
+      		break;
+      	case '3' :
+      		heaterParmsLowerFront.tempSetPointHighOff = GetInputValue();
+      		break;
+      	case '4' :
+      		heaterParmsLowerRear.tempSetPointHighOff = GetInputValue();
+      		break;
+      	default :
+      		;
+      	}
+        }
+          break;
+
+        case 'n':	// Set On Percent Parameter
+        Serial.println("Set On Percent Parameter");
+        if(ble_available() > 2)
+        {
+          cmd = ble_read();
+      	Serial.write(cmd);
+
+      	// TBD Validate Range
+      	switch(cmd)
+      	{
+      	case '1' :
+      		heaterParmsUpperFront.onPercent = GetInputValue();
+      		break;
+      	case '2' :
+      		heaterParmsUpperRear.onPercent = GetInputValue();
+      		break;
+      	case '3' :
+      		heaterParmsLowerFront.onPercent = GetInputValue();
+      		break;
+      	case '4' :
+      		heaterParmsLowerRear.onPercent = GetInputValue();
+      		break;
+      	default :
+      		;
+      	}
+        }
+          break;
+
+        case 'f':	// Set Off Percent Parameter
+        Serial.println("Set Off Percent Parameter");
+        if(ble_available() > 2)
+        {
+          cmd = ble_read();
+      	Serial.write(cmd);
+
+      	// TBD Validate Range
+      	switch(cmd)
+      	{
+      	case '1' :
+      		heaterParmsUpperFront.offPercent = GetInputValue();
+      		break;
+      	case '2' :
+      		heaterParmsUpperRear.offPercent = GetInputValue();
+      		break;
+      	case '3' :
+      		heaterParmsLowerFront.offPercent = GetInputValue();
+      		break;
+      	case '4' :
+      		heaterParmsLowerRear.offPercent = GetInputValue();
+      		break;
+      	default :
+      		;
+      	}
+        }
+          break;
+
+        case 't':	// Set Time Multiplier Minutes
+        	if(poStateMachine.isInState(stateStandby) ||
+      	poStateMachine.isInState(stateCoolDown))
+        {
+      	Serial.println("Set Time Period Cycle Seconds");
+      	if(ble_available() >= 1)
+      	{
+      		tempMultiply = GetInputValue();
+      		if((tempMultiply > 0) && (tempMultiply <= 30))
+      		{
+      			nTimesCycleTime = tempMultiply;
+      			ConvertHeaterPercentCounts();
+      		}
+      		else
+      		{
+        //		    		ble_write_bytes((byte *)"Invalid n", 9);
+          		Serial.println("Invalid n");
+          	}
+        	}
+        }
+        else
+        {
+        //    		ble_write_bytes((byte *)"Invalid Heat", 12);
+      		Serial.println("Invalid Heat");
+      	}
+        break;
+
+        default:
+        ;
+      	}
+        }
+      */
+      default:
+        Serial.print("DEBUG unknown command: ");
+        Serial.println(cmd);
+    }
   }
 
+#endif
 
+  handleIncomingCommands();
   poStateMachine.update();
 
   adcReadRun();
@@ -887,8 +940,10 @@ void stateStandbyEnter()
 
 void stateStandbyUpdate()
 {
-  //  if((liveCount % 100000) == 0)
-  //     Serial.println("SU");
+  if (powerButtonIsOn())
+  {
+    poStateMachine.transitionTo(stateTurnOnDlb);
+  }
 }
 
 void stateStandbyExit()
@@ -909,7 +964,11 @@ void stateTurnOnDlbEnter(void)
 
 void stateTurnOnDlbUpdate(void)
 {
-  if (l2DlbIsOn())
+  if (!powerButtonIsOn())
+  {
+    poStateMachine.transitionTo(stateStandby);
+  }
+  else if (l2DlbIsOn())
   {
     poStateMachine.transitionTo(stateHeatCycle);
   }
@@ -958,6 +1017,11 @@ void stateHeatCycleUpdate()
     UpdateHeaterHardware();
 
     lastTimer1Counter = saveTimer1Counter;
+  }
+
+  if (!powerButtonIsOn() || !l2DlbIsOn())
+  {
+    poStateMachine.transitionTo(stateCoolDown);
   }
 }
 
