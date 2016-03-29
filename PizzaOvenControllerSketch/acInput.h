@@ -30,11 +30,11 @@
 
 #include <stdint.h>
 
-// Call setupAcInputs in the setup function to initialize.
-void setupAcInputs(void);
+// Call acInputsInit in the setup function to initialize.
+void acInputsInit(void);
 
-// Call runAcInputs from the loop function.
-void runAcInputs(void);
+// Call acInputsRun from the loop function.
+void acInputsRun(void);
 
 // Call the get functions to get the status of the AC inputs
 bool powerButtonIsOn(void);

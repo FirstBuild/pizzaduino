@@ -52,7 +52,7 @@ void myINT1_vect(void)
   acInputTwoCount++;
 }
 
-void setupAcInputs(void)
+void acInputsInit(void)
 {
   // Arduino pin 4 is tied to 328P port pin PD4, use the pin change interrupt for input
   pciSetup(4);
@@ -60,7 +60,7 @@ void setupAcInputs(void)
   attachInterrupt(digitalPinToInterrupt(3), myINT1_vect, CHANGE);
 }
 
-void runAcInputs(void)
+void acInputsRun(void)
 {
   uint32_t newTime = millis();
 
