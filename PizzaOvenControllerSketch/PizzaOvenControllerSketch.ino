@@ -51,7 +51,7 @@
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
 #define TIMER1_PERIOD_CLOCK_FACTOR	(1) 		// Clock multiplier for Timer1
-#define MILLISECONDS_PER_SECOND				  (1000)  // Count down for a period of 1 second
+#define MILLISECONDS_PER_SECOND		  (1000)  // Count down for a period of 1 second
 #define TIMER1_OUTPUT_TEMP_PERIODIC (1000)  // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
 
 //------------------------------------------
@@ -102,15 +102,19 @@ struct HeaterParameters
       uint16_t tempSetPointHighOff; // "      "
       uint16_t onPercent;       // Time when a heater turns on in percent
       uint16_t offPercent;      // Time when a heater turns off in percent
+      uint32_t heaterCountsOn;
+      uint32_t heaterCountsOff;
+      RelayState relayState;
+      bool heaterCoolDownState;
     };
     uint16_t parameterArray[4];
   };
 };
 
-HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80};
-HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100};
-HeaterParameters heaterParmsLowerFront = {true,   387,  399,   60, 100};
-HeaterParameters heaterParmsLowerRear  = {true,   377,  388,   0,  33 };
+HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80, 0, 0, relayStateOff, false};
+HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100, 0, 0, relayStateOff, false};
+HeaterParameters heaterParmsLowerFront = {true,   387,  399,   60, 100, 0, 0, relayStateOff, false};
+HeaterParameters heaterParmsLowerRear  = {true,   377,  388,   0,  33, 0, 0, relayStateOff, false};
 HeaterParameters dummyHeaterParameters;
 
 // convenience array, could go into flash
@@ -122,27 +126,6 @@ HeaterParameters *aHeaterParameters[5] =
   &heaterParmsLowerFront,
   &heaterParmsLowerRear
 };
-
-uint32_t heaterCountsOnUpperFront;
-uint32_t heaterCountsOffUpperFront;
-uint32_t heaterCountsOnUpperRear;
-uint32_t heaterCountsOffUpperRear;
-uint32_t heaterCountsOnLowerFront;
-uint32_t heaterCountsOffLowerFront;
-uint32_t heaterCountsOnLowerRear;
-uint32_t heaterCountsOffLowerRear;
-
-// flags to keep the state of the heater hardware
-RelayState heaterHardwareStateUpperFront = relayStateOff;
-RelayState heaterHardwareStateUpperRear  = relayStateOff;
-RelayState heaterHardwareStateLowerFront = relayStateOff;
-RelayState heaterHardwareStateLowerRear  = relayStateOff;
-
-// flags to keep the state of the heater cool down once reach High Off Set Point
-bool heaterCoolDownStateUpperFront = false;
-bool heaterCoolDownStateUpperRear  = false;
-bool heaterCoolDownStateLowerFront = false;
-bool heaterCoolDownStateLowerRear  = false;
 
 volatile bool outputTempPeriodic = false;
 
@@ -162,10 +145,6 @@ void CoolingFanControl(boolean control);
 float AnalogThermocoupleTemp(uint16_t rawA2D);
 float InputThermocoupleFan();
 void readThermocouples(void);
-void UpdateHeatControlUpperFront(uint16_t currentCounterTimer);
-void UpdateHeatControlUpperRear(uint16_t currentCounterTimer);
-void UpdateHeatControlLowerFront(uint16_t currentCounterTimer);
-void UpdateHeatControlLowerRear(uint16_t currentCounterTimer);
 void PeriodicOutputTemps();
 bool CharValidDigit(unsigned char digit);
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
@@ -206,37 +185,37 @@ void readThermocouples(void)
 
 void ConvertHeaterPercentCounts()
 {
-  heaterCountsOnUpperFront  = (uint16_t)(((uint32_t)heaterParmsUpperFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-  heaterCountsOffUpperFront = (uint16_t)(((uint32_t)heaterParmsUpperFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  heaterParmsUpperFront.heaterCountsOn  = (uint16_t)(((uint32_t)heaterParmsUpperFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  heaterParmsUpperFront.heaterCountsOff = (uint16_t)(((uint32_t)heaterParmsUpperFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  heaterCountsOnUpperRear   = (uint16_t)(((uint32_t)heaterParmsUpperRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-  heaterCountsOffUpperRear  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  heaterParmsUpperRear.heaterCountsOn   = (uint16_t)(((uint32_t)heaterParmsUpperRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  heaterParmsUpperRear.heaterCountsOff  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  heaterCountsOnLowerFront  = (uint16_t)(((uint32_t)heaterParmsLowerFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
-  heaterCountsOffLowerFront = (uint16_t)(((uint32_t)heaterParmsLowerFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  heaterParmsLowerFront.heaterCountsOn  = (uint16_t)(((uint32_t)heaterParmsLowerFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  heaterParmsLowerFront.heaterCountsOff = (uint16_t)(((uint32_t)heaterParmsLowerFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 
-  heaterCountsOnLowerRear   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
-  heaterCountsOffLowerRear  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  heaterParmsLowerRear.heaterCountsOn   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  heaterParmsLowerRear.heaterCountsOff  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 }
 
 void UpdateHeaterHardware()
 {
-  changeRelayState(HEATER_ENABLE_UPPER_FRONT, heaterHardwareStateUpperFront);
-  changeRelayState(HEATER_ENABLE_UPPER_REAR, heaterHardwareStateUpperRear);
-  changeRelayState(HEATER_ENABLE_LOWER_FRONT, heaterHardwareStateLowerFront);
-  changeRelayState(HEATER_ENABLE_LOWER_REAR, heaterHardwareStateLowerRear);
+  changeRelayState(HEATER_ENABLE_UPPER_FRONT, heaterParmsUpperFront.relayState);
+  changeRelayState(HEATER_ENABLE_UPPER_REAR, heaterParmsUpperRear.relayState);
+  changeRelayState(HEATER_ENABLE_LOWER_FRONT, heaterParmsLowerFront.relayState);
+  changeRelayState(HEATER_ENABLE_LOWER_REAR, heaterParmsLowerRear.relayState);
 }
 void AllHeatersOffStateClear()
 {
-  heaterHardwareStateUpperFront = relayStateOff;
-  heaterHardwareStateUpperRear  = relayStateOff;
-  heaterHardwareStateLowerFront = relayStateOff;
-  heaterHardwareStateLowerRear  = relayStateOff;
+  heaterParmsUpperFront.relayState = relayStateOff;
+  heaterParmsUpperRear.relayState  = relayStateOff;
+  heaterParmsLowerFront.relayState = relayStateOff;
+  heaterParmsLowerRear.relayState  = relayStateOff;
 
-  heaterCoolDownStateUpperFront = false;
-  heaterCoolDownStateUpperRear  = false;
-  heaterCoolDownStateLowerFront = false;
-  heaterCoolDownStateLowerRear  = false;
+  heaterParmsUpperFront.heaterCoolDownState = false;
+  heaterParmsUpperRear.heaterCoolDownState  = false;
+  heaterParmsLowerFront.heaterCoolDownState = false;
+  heaterParmsLowerRear.heaterCoolDownState  = false;
 
   UpdateHeaterHardware();
 
@@ -282,183 +261,48 @@ float InputThermocoupleFan()
   return tempC;
 }
 
-void UpdateHeatControlUpperFront(uint16_t currentCounterTimer)
+void UpdateHeatControl(HeaterParameters *pHeater, uint16_t currentCounterTimer)
 {
   float tempC;
   uint16_t icase = 0;
 
-  heaterHardwareStateUpperFront = relayStateOff;
-  if ((heaterParmsUpperFront.enabled == true) &&
-      (currentCounterTimer >= heaterCountsOnUpperFront) &&
-      (currentCounterTimer <= heaterCountsOffUpperFront))
+  pHeater->relayState = relayStateOff;
+  if ((pHeater->enabled == true) &&
+      (currentCounterTimer >= pHeater->heaterCountsOn) &&
+      (currentCounterTimer <= pHeater->heaterCountsOff))
   {
     tempC = thermocoupleUpperFront;
 
     // If not in cool down and less than High Set Point Turn on Heater
-    if ((heaterCoolDownStateUpperFront == false) && (tempC < (float)heaterParmsUpperFront.tempSetPointHighOff))
+    if ((pHeater->heaterCoolDownState == false) && (tempC < (float)pHeater->tempSetPointHighOff))
     {
       icase = 1;
-      heaterHardwareStateUpperFront = relayStateOn;
+      pHeater->relayState = relayStateOn;
     }
     // If not in cool down and greater than High Set Point turn off heater and set cool down
-    else if ((heaterCoolDownStateUpperFront == false) && (tempC >= (float)heaterParmsUpperFront.tempSetPointHighOff))
+    else if ((pHeater->heaterCoolDownState == false) && (tempC >= (float)pHeater->tempSetPointHighOff))
     {
       icase = 2;
-      heaterCoolDownStateUpperFront = true;
-      heaterHardwareStateUpperFront = relayStateOff;
+      pHeater->heaterCoolDownState = true;
+      pHeater->relayState = relayStateOff;
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
-    else if ((heaterCoolDownStateUpperFront == true) && (tempC <= (float)heaterParmsUpperFront.tempSetPointLowOn))
+    else if ((pHeater->heaterCoolDownState == true) && (tempC <= (float)pHeater->tempSetPointLowOn))
     {
       icase = 3;
-      heaterCoolDownStateUpperFront = false;
-      heaterHardwareStateUpperFront = relayStateOn;
+      pHeater->heaterCoolDownState = false;
+      pHeater->relayState = relayStateOn;
     }
     else // In cool down but have not reached the Low Set Point
     {
       icase = 4;
-      heaterHardwareStateUpperFront = relayStateOff;
+      pHeater->relayState = relayStateOff;
     }
   }
-  else	// Heater Disabled or Outside the percentage limits of the cycle
+  else  // Heater Disabled or Outside the percentage limits of the cycle
   {
     icase = 9;
-    heaterHardwareStateUpperFront = relayStateOff;
-  }
-}
-
-void UpdateHeatControlUpperRear(uint16_t currentCounterTimer)
-{
-  float tempC;
-  uint16_t icase = 0;  // For case debug
-
-  heaterHardwareStateUpperRear = relayStateOff;
-  if ((heaterParmsUpperRear.enabled == true) &&
-      (currentCounterTimer >= heaterCountsOnUpperRear) &&
-      (currentCounterTimer <= heaterCountsOffUpperRear))
-  {
-    tempC = thermocoupleUpperRear;
-
-    // If not in cool down and less than High Set Point Turn on Heater
-    if ((heaterCoolDownStateUpperRear == false) && (tempC < (float)heaterParmsUpperRear.tempSetPointHighOff))
-    {
-      icase = 11;
-      heaterHardwareStateUpperRear = relayStateOn;
-    }
-    // If not in cool down and greater than High Set Point turn off heater and set cool down
-    else if ((heaterCoolDownStateUpperRear == false) && (tempC >= (float)heaterParmsUpperRear.tempSetPointHighOff))
-    {
-      icase = 12;
-      heaterCoolDownStateUpperRear = true;
-      heaterHardwareStateUpperRear = relayStateOff;
-    }
-    // If in cool down and less than equal than low set point, exit cool down and turn heater on
-    else if ((heaterCoolDownStateUpperRear == true) && (tempC <= (float)heaterParmsUpperRear.tempSetPointLowOn))
-    {
-      icase = 13;
-      heaterCoolDownStateUpperRear = false;
-      heaterHardwareStateUpperRear = relayStateOn;
-    }
-    else // In cool down but have not reached the Low Set Point
-    {
-      icase = 14;
-      heaterHardwareStateUpperRear = relayStateOff;
-    }
-  }
-  else	// Heater Disabled or Outside the percentage limits of the cycle
-  {
-    icase = 19;
-    heaterHardwareStateUpperRear = relayStateOff;
-  }
-}
-
-void UpdateHeatControlLowerFront(uint16_t currentCounterTimer)
-{
-  float tempC;
-  uint16_t icase = 0;  // For case debug
-
-  heaterHardwareStateLowerFront = relayStateOff;
-  if ((heaterParmsLowerFront.enabled == true) &&
-      (currentCounterTimer >= heaterCountsOnLowerFront) &&
-      (currentCounterTimer <= heaterCountsOffLowerFront))
-  {
-    tempC = thermocoupleLowerFront;
-
-    // If not in cool down and less than High Set Point Turn on Heater
-    if ((heaterCoolDownStateLowerFront == false) && (tempC < (float)heaterParmsLowerFront.tempSetPointHighOff))
-    {
-      icase = 21;
-      heaterHardwareStateLowerFront = relayStateOn;
-    }
-    // If not in cool down and greater than High Set Point turn off heater and set cool down
-    else if ((heaterCoolDownStateLowerFront == false) && (tempC >= (float)heaterParmsLowerFront.tempSetPointHighOff))
-    {
-      icase = 22;
-      heaterCoolDownStateLowerFront = true;
-      heaterHardwareStateLowerFront = relayStateOff;
-    }
-    // If in cool down and less than equal than low set point, exit cool down and turn heater on
-    else if ((heaterCoolDownStateLowerFront == true) && (tempC <= (float)heaterParmsLowerFront.tempSetPointLowOn))
-    {
-      icase = 23;
-      heaterCoolDownStateLowerFront = false;
-      heaterHardwareStateLowerFront = relayStateOn;
-    }
-    else // In cool down but have not reached the Low Set Point
-    {
-      icase = 24;
-      heaterHardwareStateLowerFront = relayStateOff;
-    }
-  }
-  else	// Heater Disabled or Outside the percentage limits of the cycle
-  {
-    icase = 29;
-    heaterHardwareStateLowerFront = relayStateOff;
-  }
-}
-
-void UpdateHeatControlLowerRear(uint16_t currentCounterTimer)
-{
-  float tempC;
-  uint16_t icase = 0;  // For case debug
-
-  heaterHardwareStateLowerRear = relayStateOff;
-  if ((heaterParmsLowerRear.enabled == true) &&
-      (currentCounterTimer >= heaterCountsOnLowerRear) &&
-      (currentCounterTimer <= heaterCountsOffLowerRear))
-  {
-    tempC = thermocoupleLowerRear;
-
-    // If not in cool down and less than High Set Point Turn on Heater
-    if ((heaterCoolDownStateLowerRear == false) && (tempC < (float)heaterParmsLowerRear.tempSetPointHighOff))
-    {
-      icase = 31;
-      heaterHardwareStateLowerRear = relayStateOn;
-    }
-    // If not in cool down and greater than High Set Point turn off heater and set cool down
-    else if ((heaterCoolDownStateLowerRear == false) && (tempC >= (float)heaterParmsLowerRear.tempSetPointHighOff))
-    {
-      icase = 32;
-      heaterCoolDownStateLowerRear = true;
-      heaterHardwareStateLowerRear = relayStateOff;
-    }
-    // If in cool down and less than equal than low set point, exit cool down and turn heater on
-    else if ((heaterCoolDownStateLowerRear == true) && (tempC <= (float)heaterParmsLowerRear.tempSetPointLowOn))
-    {
-      icase = 33;
-      heaterCoolDownStateLowerRear = false;
-      heaterHardwareStateLowerRear = relayStateOn;
-    }
-    else // In cool down but have not reached the Low Set Point
-    {
-      icase = 34;
-      heaterHardwareStateLowerRear = relayStateOff;
-    }
-  }
-  else	// Heater Disabled or Outside the percentage limits of the cycle
-  {
-    icase = 39;
-    heaterHardwareStateLowerRear = relayStateOff;
+    pHeater->relayState = relayStateOff;
   }
 }
 
@@ -619,7 +463,7 @@ void handleIncomingCommands(void)
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
     if (receivedCommandBufferIndex >= RECEVIED_COMMAND_BUFFER_LENGTH)
     {
-      Serial.println("DEBUG command input buffer exceeded.");
+      Serial.println(F("DEBUG command input buffer exceeded."));
       receivedCommandBufferIndex = 0;
     }
     else
@@ -680,7 +524,7 @@ void handleIncomingCommands(void)
                 printHeaterTemperatureParameters("LR ", heaterParmsLowerRear.parameterArray);
                 break;
               default:
-                Serial.print("DEBUG unknown command received for the 'p' command: ");
+                Serial.print(F("DEBUG unknown command received for the 'p' command: "));
                 Serial.println(receivedCommandBuffer[1]);
                 break;
             }
@@ -709,7 +553,7 @@ void handleIncomingCommands(void)
             }
             else
             {
-              Serial.print("DEBUG Invalid heater selected: ");
+              Serial.print(F("DEBUG Invalid heater selected: "));
               Serial.println((char)receivedCommandBuffer[1]);
             }
             receivedCommandBufferIndex = 0;
@@ -736,7 +580,7 @@ void handleIncomingCommands(void)
             }
             else
             {
-              Serial.print("DEBUG Invalid heater selected: ");
+              Serial.print(F("DEBUG Invalid heater selected: "));
               Serial.println((char)receivedCommandBuffer[1]);
             }
             receivedCommandBufferIndex = 0;
@@ -766,7 +610,7 @@ void handleIncomingCommands(void)
                     }
                     else
                     {
-                      Serial.print("DEBUG Invalid time multiplier: ");
+                      Serial.print(F("DEBUG Invalid time multiplier: "));
                       Serial.println(tempMultiply);
                     }
                     break;
@@ -778,12 +622,12 @@ void handleIncomingCommands(void)
                     }
                     else
                     {
-                      Serial.print("DEBUG Invalid time multiplier: ");
+                      Serial.print(F("DEBUG Invalid time multiplier: "));
                       Serial.println(tempMultiply);
                     }
                     break;
                   default:
-                    Serial.println("DEBUG Invalid time base selected.");
+                    Serial.println(F("DEBUG Invalid time base selected."));
                     break;
                 }
 
@@ -791,12 +635,12 @@ void handleIncomingCommands(void)
               }
               else
               {
-                Serial.println("DEBUG Cannot set time period, not enough characters");
+                Serial.println(F("DEBUG Cannot set time period, not enough characters"));
               }
             }
             else
             {
-              Serial.println("DEBUG Cannot set time period at this time.");
+              Serial.println(F("DEBUG Cannot set time period at this time."));
             }
             receivedCommandBufferIndex = 0;
           }
@@ -809,7 +653,7 @@ void handleIncomingCommands(void)
           break;
 
         default:
-          Serial.print("DEBUG unknown command received: ");
+          Serial.print(F("DEBUG unknown command received: "));
           Serial.println(receivedCommandBuffer[0]);
           receivedCommandBufferIndex = 0;
           break;
@@ -869,7 +713,7 @@ uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf)
     }
     else
     {
-      Serial.print("DEBUG Invalid input, only digits expected: ");
+      Serial.print(F("DEBUG Invalid input, only digits expected: "));
       Serial.print((char*)pBuf);
       inputValue = *pValue;
       break;
@@ -969,8 +813,8 @@ void stateHeatCycleUpdate()
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
     CoolingFanControl(true);
-    UpdateHeatControlUpperFront(currentTriacTimerCounter);
-    UpdateHeatControlUpperRear(currentTriacTimerCounter);
+    UpdateHeatControl(&heaterParmsUpperFront, currentTriacTimerCounter);
+    UpdateHeatControl(&heaterParmsUpperRear, currentTriacTimerCounter);
 
     UpdateHeaterHardware();
 
@@ -981,8 +825,8 @@ void stateHeatCycleUpdate()
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
     CoolingFanControl(true);
-    UpdateHeatControlLowerFront(currentRelayTimerCounter);
-    UpdateHeatControlLowerRear(currentRelayTimerCounter);
+    UpdateHeatControl(&heaterParmsLowerFront, currentRelayTimerCounter);
+    UpdateHeatControl(&heaterParmsLowerRear, currentRelayTimerCounter);
 
     UpdateHeaterHardware();
 
