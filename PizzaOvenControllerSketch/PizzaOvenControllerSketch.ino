@@ -51,7 +51,7 @@
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
 #define TIMER1_PERIOD_CLOCK_FACTOR	(1) 		// Clock multiplier for Timer1
-#define TIMER1_COUNTER_WRAP				  (1000)  // Count down for a period of 1 second
+#define MILLISECONDS_PER_SECOND				  (1000)  // Count down for a period of 1 second
 #define TIMER1_OUTPUT_TEMP_PERIODIC (1000)  // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
 
 //------------------------------------------
@@ -85,11 +85,13 @@ FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in
 
 // Timer one is running to control heat percentage and start
 //  Re-synchronized on the start of heating
-volatile uint16_t timer1Counter = 0;
+volatile uint32_t triacTimeBase = 0;
+volatile uint32_t relayTimeBase = 0;
 uint16_t countOutputTempPeriodic = 0;
 
 // Heater cycle time in multiples of 1 second
-uint16_t nTimesCycleTime = 4;
+uint16_t triacPeriodSeconds = 4;
+uint16_t relayPeriodSeconds = 16;
 
 struct HeaterParameters
 {
@@ -106,7 +108,7 @@ struct HeaterParameters
 };
 
 HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80};
-HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100 };
+HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100};
 HeaterParameters heaterParmsLowerFront = {true,   387,  399,   60, 100};
 HeaterParameters heaterParmsLowerRear  = {true,   377,  388,   0,  33 };
 HeaterParameters dummyHeaterParameters;
@@ -121,14 +123,14 @@ HeaterParameters *aHeaterParameters[5] =
   &heaterParmsLowerRear
 };
 
-uint16_t heaterCountsOnUpperFront;
-uint16_t heaterCountsOffUpperFront;
-uint16_t heaterCountsOnUpperRear;
-uint16_t heaterCountsOffUpperRear;
-uint16_t heaterCountsOnLowerFront;
-uint16_t heaterCountsOffLowerFront;
-uint16_t heaterCountsOnLowerRear;
-uint16_t heaterCountsOffLowerRear;
+uint32_t heaterCountsOnUpperFront;
+uint32_t heaterCountsOffUpperFront;
+uint32_t heaterCountsOnUpperRear;
+uint32_t heaterCountsOffUpperRear;
+uint32_t heaterCountsOnLowerFront;
+uint32_t heaterCountsOffLowerFront;
+uint32_t heaterCountsOnLowerRear;
+uint32_t heaterCountsOffLowerRear;
 
 // flags to keep the state of the heater hardware
 RelayState heaterHardwareStateUpperFront = relayStateOff;
@@ -204,17 +206,17 @@ void readThermocouples(void)
 
 void ConvertHeaterPercentCounts()
 {
-  heaterCountsOnUpperFront  = (uint16_t)(((uint32_t)heaterParmsUpperFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
-  heaterCountsOffUpperFront = (uint16_t)(((uint32_t)heaterParmsUpperFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+  heaterCountsOnUpperFront  = (uint16_t)(((uint32_t)heaterParmsUpperFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  heaterCountsOffUpperFront = (uint16_t)(((uint32_t)heaterParmsUpperFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  heaterCountsOnUpperRear   = (uint16_t)(((uint32_t)heaterParmsUpperRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
-  heaterCountsOffUpperRear  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+  heaterCountsOnUpperRear   = (uint16_t)(((uint32_t)heaterParmsUpperRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  heaterCountsOffUpperRear  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  heaterCountsOnLowerFront  = (uint16_t)(((uint32_t)heaterParmsLowerFront.onPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
-  heaterCountsOffLowerFront = (uint16_t)(((uint32_t)heaterParmsLowerFront.offPercent * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+  heaterCountsOnLowerFront  = (uint16_t)(((uint32_t)heaterParmsLowerFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  heaterCountsOffLowerFront = (uint16_t)(((uint32_t)heaterParmsLowerFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 
-  heaterCountsOnLowerRear   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
-  heaterCountsOffLowerRear  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * TIMER1_COUNTER_WRAP + 50) / 100) * nTimesCycleTime;
+  heaterCountsOnLowerRear   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  heaterCountsOffLowerRear  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 }
 
 void UpdateHeaterHardware()
@@ -501,11 +503,18 @@ void PeriodicOutputTemps()
 //------------------------------------------
 void HeaterTimerInterrupt()
 {
-  timer1Counter++;
+  triacTimeBase++;
 
-  if (timer1Counter > (TIMER1_COUNTER_WRAP * nTimesCycleTime))
+  if (triacTimeBase > (MILLISECONDS_PER_SECOND * triacPeriodSeconds))
   {
-    timer1Counter = 0;
+    triacTimeBase = 0;
+  }
+
+  relayTimeBase++;
+
+  if (relayTimeBase > (MILLISECONDS_PER_SECOND * relayPeriodSeconds))
+  {
+    relayTimeBase = 0;
   }
 
   countOutputTempPeriodic++;
@@ -567,6 +576,7 @@ void setup()
   adcReadInit(ANALOG_THERMO_FAN);
 
   ConvertHeaterPercentCounts();
+
   Serial.println("Start");
 }
 
@@ -618,10 +628,10 @@ void handleIncomingCommands(void)
       switch (receivedCommandBuffer[0])
       {
         /*
-        case 's':  // Start Pizza Oven Cycle
+          case 's':  // Start Pizza Oven Cycle
           break;
 
-        case 'q': // Quit Pizza Oven Cycle
+          case 'q': // Quit Pizza Oven Cycle
           Serial.println("Exit");
           if (poStateMachine.isInState(stateHeatCycle))
           {
@@ -633,7 +643,7 @@ void handleIncomingCommands(void)
           }
           break;
         */
-        
+
         case 'v': // query protocol version
           Serial.print("V ");
           Serial.print(PROTOCOL_MAJOR_VERSION);
@@ -651,9 +661,11 @@ void handleIncomingCommands(void)
             {
               case '0' :
                 //              strLen = sprintf(formatStr, "nTimes %u\n",
-                //                               nTimesCycleTime);
+                //                               triacPeriodSeconds);
                 Serial.print("nTimes ");
-                Serial.println(nTimesCycleTime);
+                Serial.print(triacPeriodSeconds);
+                Serial.print(" ");
+                Serial.println(relayPeriodSeconds);
                 break;
               case '1' :
                 printHeaterTemperatureParameters("UF ", heaterParmsUpperFront.parameterArray);
@@ -731,25 +743,55 @@ void handleIncomingCommands(void)
           }
           break;
 
-        case 't':  // Set Time Multiplier Minutes
+        case 't':  // Set time base in seconds
           // wait for CR or LF
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
             if (poStateMachine.isInState(stateStandby) ||
                 poStateMachine.isInState(stateCoolDown))
             {
-              uint16_t tempMultiply;
-              GetInputValue(&tempMultiply, &receivedCommandBuffer[1]);
-
-              if ((tempMultiply > 0) && (tempMultiply <= 30))
+              if (receivedCommandBufferIndex > 3)
               {
-                nTimesCycleTime = tempMultiply;
-                ConvertHeaterPercentCounts();
+                uint16_t tempMultiply;
+
+                GetInputValue(&tempMultiply, &receivedCommandBuffer[2]);
+
+                switch (receivedCommandBuffer[1])
+                {
+                  case '1':
+                    if ((tempMultiply > 0) && (tempMultiply <= 30))
+                    {
+                      triacPeriodSeconds = tempMultiply;
+                      ConvertHeaterPercentCounts();
+                    }
+                    else
+                    {
+                      Serial.print("DEBUG Invalid time multiplier: ");
+                      Serial.println(tempMultiply);
+                    }
+                    break;
+                  case '2':
+                    if ((tempMultiply > 0) && (tempMultiply <= 600))
+                    {
+                      relayPeriodSeconds = tempMultiply;
+                      ConvertHeaterPercentCounts();
+                    }
+                    else
+                    {
+                      Serial.print("DEBUG Invalid time multiplier: ");
+                      Serial.println(tempMultiply);
+                    }
+                    break;
+                  default:
+                    Serial.println("DEBUG Invalid time base selected.");
+                    break;
+                }
+
+
               }
               else
               {
-                Serial.print("DEBUG Invalid time multiplier: ");
-                Serial.println(tempMultiply);
+                Serial.println("DEBUG Cannot set time period, not enough characters");
               }
             }
             else
@@ -797,7 +839,7 @@ void loop()
   boostEnable(relayBoostRun);
   relayDriverRun();
 
-  PeriodicOutputTemps();
+//  PeriodicOutputTemps();
   handleRelayWatchdog();
 }
 
@@ -896,14 +938,19 @@ void stateTurnOnDlbExit(void)
 //state machine stateHeatCycle
 //------------------------------------------
 //State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
-uint16_t saveTimer1Counter, lastTimer1Counter;
+uint32_t currentTriacTimerCounter, oldTriacTimerCounter;
+uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 
 void stateHeatCycleEnter()
 {
   Serial.println("stateHeatCycleEnter");
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
-  timer1Counter = 0;
+  triacTimeBase = 0;
+  relayTimeBase = 0;
+  // Fake the old time so that we exercise the relays the first time through
+  oldTriacTimerCounter = 100000;
+  oldRelayTimerCounter = 100000;
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
@@ -914,22 +961,32 @@ void stateHeatCycleUpdate()
   //    if((liveCount % 100) == 0)
   //      Serial.println("HU");
 
-  // Save working value timer1Counter since can be updated by interrupt
-  saveTimer1Counter = timer1Counter;
+  // Save working value triacTimeBase since can be updated by interrupt
+  currentTriacTimerCounter = triacTimeBase;
+  currentRelayTimerCounter = relayTimeBase;
 
-  // Only update heat control if Timer1 Counter changed
-
-  if (saveTimer1Counter != lastTimer1Counter)
+  // Handle triac control
+  if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
     CoolingFanControl(true);
-    UpdateHeatControlUpperFront(saveTimer1Counter);
-    UpdateHeatControlUpperRear(saveTimer1Counter);
-    UpdateHeatControlLowerFront(saveTimer1Counter);
-    UpdateHeatControlLowerRear(saveTimer1Counter);
+    UpdateHeatControlUpperFront(currentTriacTimerCounter);
+    UpdateHeatControlUpperRear(currentTriacTimerCounter);
 
     UpdateHeaterHardware();
 
-    lastTimer1Counter = saveTimer1Counter;
+    oldTriacTimerCounter = currentTriacTimerCounter;
+  }
+
+  // Handle relay control
+  if (currentRelayTimerCounter != oldRelayTimerCounter)
+  {
+    CoolingFanControl(true);
+    UpdateHeatControlLowerFront(currentRelayTimerCounter);
+    UpdateHeatControlLowerRear(currentRelayTimerCounter);
+
+    UpdateHeaterHardware();
+
+    oldRelayTimerCounter = currentRelayTimerCounter;
   }
 
   if (!powerButtonIsOn() || !l2DlbIsOn())

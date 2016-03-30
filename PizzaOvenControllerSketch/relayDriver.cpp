@@ -88,9 +88,9 @@ void relayDriverRun(void)
       if (relaysToTurnOff.remain() > 0)
       {
         pin = relaysToTurnOff.pop();
-//        Serial.print("Turning relay ");
-//        Serial.print(pin);
-//        Serial.println(" off.");
+        //        Serial.print("Turning relay ");
+        //        Serial.print(pin);
+        //        Serial.println(" off.");
         digitalWrite(pin, LOW);
         setRelayActionComplete(pin);
         oldTime = newTime;
@@ -99,9 +99,9 @@ void relayDriverRun(void)
       {
         boostEnable(relayBoostOn);
         pin = relaysToTurnOn.pop();
-//        Serial.print("Turning relay ");
-//        Serial.print(pin);
-//        Serial.println(" on.");
+        //        Serial.print("Turning relay ");
+        //        Serial.print(pin);
+        //        Serial.println(" on.");
         digitalWrite(pin, HIGH);
         setRelayActionComplete(pin);
         oldTime = newTime;
@@ -119,20 +119,56 @@ static void addRelayToChangeList(uint8_t pin, RelayState desiredState)
   switch (desiredState)
   {
     case relayStateOn:
-//      Serial.print("Staging relay ");
-//      Serial.print(pin);
-//      Serial.println(" on.");
+      //      Serial.print("Staging relay ");
+      //      Serial.print(pin);
+      //      Serial.println(" on.");
       relaysToTurnOn.push(pin);
       break;
 
     case relayStateOff:
-//      Serial.print("Staging relay ");
-//      Serial.print(pin);
-//      Serial.println(" off.");
+      //      Serial.print("Staging relay ");
+      //      Serial.print(pin);
+      //      Serial.println(" off.");
       relaysToTurnOff.push(pin);
       break;
   }
 }
+
+#ifdef KILL
+extern uint16_t saveTimer1Counter;
+static void printRelayDesiredStates(void)
+{
+  uint32_t t = millis();
+  uint8_t i;
+  static bool headerNotPrinted = true;
+
+  if (headerNotPrinted)
+  {
+    headerNotPrinted = false;
+    Serial.println("Relay Pins");
+    Serial.print("Millis,TimerCounter,");
+    Serial.print(relay[0].pin);
+    for (i = 1; i < lastRelay; i++)
+    {
+      Serial.print(",");
+      Serial.print(relay[i].pin);
+    }
+    Serial.println("");
+  }
+
+  Serial.print(t);
+  Serial.print(",");
+  Serial.print(saveTimer1Counter);
+  Serial.print(",");
+  Serial.print(relay[0].desiredState == relayStateOn ? 1 : 0);
+  for (i = 1; i < lastRelay; i++)
+  {
+    Serial.print(",");
+    Serial.print(relay[i].desiredState == relayStateOn ? 1 : 0);
+  }
+  Serial.println("");
+}
+#endif
 
 void changeRelayState(uint8_t pin, RelayState desiredState)
 {
@@ -146,6 +182,7 @@ void changeRelayState(uint8_t pin, RelayState desiredState)
   }
   if ((currentState != desiredState) && (relay[index].actionCompleted == true))
   {
+//    printRelayDesiredStates();
     relay[index].actionCompleted = false;
     addRelayToChangeList(pin, desiredState);
   }
