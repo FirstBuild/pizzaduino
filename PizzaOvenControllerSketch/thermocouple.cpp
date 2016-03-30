@@ -98,13 +98,22 @@ static float AnalogTCVolts(uint16_t rawA2D)
   return analogVoltage;
 }
 
+static float c2f(float tempC)
+{
+  float tempF;
+
+  tempF = tempC * 9 / 5 + 32;
+
+  return tempF;
+}
+
 float readAD8495KTC(uint8_t pin)
 {
-  float tempC;
+  float tempF;
 
-  tempC = AD8495KTCInterpolate(AnalogTCVolts(getA2DReadingForPin(pin)));
+  tempF = c2f(AD8495KTCInterpolate(AnalogTCVolts(getA2DReadingForPin(pin))));
 
-  return tempC;
+  return tempF;
   
 }
 

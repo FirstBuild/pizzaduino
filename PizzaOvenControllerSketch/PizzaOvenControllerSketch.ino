@@ -45,8 +45,8 @@
 //------------------------------------------
 
 // For now just check cool down on fan
-#define COOL_DOWN_EXIT_FAN_TEMP				((float)38.0)  // 100 degrees F
-#define COOL_DOWN_EXIT_HEATER_TEMP		((float)65.0)  // 150 degrees F
+#define COOL_DOWN_EXIT_FAN_TEMP				((float)100.0)  // 100 degrees F
+#define COOL_DOWN_EXIT_HEATER_TEMP		((float)150.0)  // 150 degrees F
 
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
@@ -113,8 +113,8 @@ struct HeaterParameters
 
 HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80, 0, 0, relayStateOff, false};
 HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100, 0, 0, relayStateOff, false};
-HeaterParameters heaterParmsLowerFront = {true,   387,  399,   60, 100, 0, 0, relayStateOff, false};
-HeaterParameters heaterParmsLowerRear  = {true,   377,  388,   0,  33, 0, 0, relayStateOff, false};
+HeaterParameters heaterParmsLowerFront = {true,   729,  750,   60, 100, 0, 0, relayStateOff, false};
+HeaterParameters heaterParmsLowerRear  = {true,   711,  730,   0,  33, 0, 0, relayStateOff, false};
 HeaterParameters dummyHeaterParameters;
 
 // convenience array, could go into flash
@@ -683,7 +683,7 @@ void loop()
   boostEnable(relayBoostRun);
   relayDriverRun();
 
-//  PeriodicOutputTemps();
+  PeriodicOutputTemps();
   handleRelayWatchdog();
 }
 
@@ -742,6 +742,14 @@ void stateStandbyUpdate()
   if (powerButtonIsOn())
   {
     poStateMachine.transitionTo(stateTurnOnDlb);
+  }
+  else if ((thermocoupleFan > COOL_DOWN_EXIT_FAN_TEMP + 15) ||
+      (thermocoupleUpperFront > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+      (thermocoupleUpperRear  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+      (thermocoupleLowerFront > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+      (thermocoupleLowerRear  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
+  {
+    poStateMachine.transitionTo(stateCoolDown);
   }
 }
 
@@ -854,6 +862,8 @@ void stateHeatCycleExit()
 void stateCoolDownEnter()
 {
   Serial.println("stateCoolDown");
+  digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
+  CoolingFanControl(true);
 }
 
 void stateCoolDownUpdate()
@@ -870,6 +880,10 @@ void stateCoolDownUpdate()
   {
     CoolingFanControl(false);
     poStateMachine.transitionTo(stateStandby);
+  }
+  else if (powerButtonIsOn())
+  {
+    poStateMachine.transitionTo(stateTurnOnDlb);
   }
 }
 
