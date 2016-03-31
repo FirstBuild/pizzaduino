@@ -106,15 +106,16 @@ struct HeaterParameters
       uint32_t heaterCountsOff;
       RelayState relayState;
       bool heaterCoolDownState;
+      float thermocouple;
     };
     uint16_t parameterArray[4];
   };
 };
 
-HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80, 0, 0, relayStateOff, false};
-HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100, 0, 0, relayStateOff, false};
-HeaterParameters heaterParmsLowerFront = {true,   729,  750,   60, 100, 0, 0, relayStateOff, false};
-HeaterParameters heaterParmsLowerRear  = {true,   711,  730,   0,  33, 0, 0, relayStateOff, false};
+HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80, 0, 0, relayStateOff, false, 0.0};
+HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100, 0, 0, relayStateOff, false, 0.0};
+HeaterParameters heaterParmsLowerFront = {true,   729,  750,   60, 100, 0, 0, relayStateOff, false, 0.0};
+HeaterParameters heaterParmsLowerRear  = {true,   711,  730,   0,  33, 0, 0, relayStateOff, false, 0.0};
 HeaterParameters dummyHeaterParameters;
 
 // convenience array, could go into flash
@@ -129,10 +130,6 @@ HeaterParameters *aHeaterParameters[5] =
 
 volatile bool outputTempPeriodic = false;
 
-float thermocoupleUpperFront = 0.0;
-float thermocoupleUpperRear = 0.0;
-float thermocoupleLowerFront = 0.0;
-float thermocoupleLowerRear = 0.0;
 float thermocoupleFan = 0.0;
 
 //------------------------------------------
@@ -161,16 +158,16 @@ void readThermocouples(void)
   handleRelayWatchdog();
   switch (nextReading++) {
     case 0:
-      thermocoupleUpperFront = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
+      heaterParmsUpperFront.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
       break;
     case 1:
-      thermocoupleUpperRear = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
+      heaterParmsUpperRear.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
       break;
     case 2:
-      thermocoupleLowerFront = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
+      heaterParmsLowerFront.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
       break;
     case 3:
-      thermocoupleLowerRear = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+      heaterParmsLowerRear.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
       break;
     case 4:
       thermocoupleFan = InputThermocoupleFan();
@@ -263,45 +260,39 @@ float InputThermocoupleFan()
 
 void UpdateHeatControl(HeaterParameters *pHeater, uint16_t currentCounterTimer)
 {
-  float tempC;
-  uint16_t icase = 0;
+  float temperature;
 
   pHeater->relayState = relayStateOff;
   if ((pHeater->enabled == true) &&
       (currentCounterTimer >= pHeater->heaterCountsOn) &&
       (currentCounterTimer <= pHeater->heaterCountsOff))
   {
-    tempC = thermocoupleUpperFront;
+    temperature = pHeater->thermocouple;
 
     // If not in cool down and less than High Set Point Turn on Heater
-    if ((pHeater->heaterCoolDownState == false) && (tempC < (float)pHeater->tempSetPointHighOff))
+    if ((pHeater->heaterCoolDownState == false) && (temperature < (float)pHeater->tempSetPointHighOff))
     {
-      icase = 1;
       pHeater->relayState = relayStateOn;
     }
     // If not in cool down and greater than High Set Point turn off heater and set cool down
-    else if ((pHeater->heaterCoolDownState == false) && (tempC >= (float)pHeater->tempSetPointHighOff))
+    else if ((pHeater->heaterCoolDownState == false) && (temperature >= (float)pHeater->tempSetPointHighOff))
     {
-      icase = 2;
       pHeater->heaterCoolDownState = true;
       pHeater->relayState = relayStateOff;
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
-    else if ((pHeater->heaterCoolDownState == true) && (tempC <= (float)pHeater->tempSetPointLowOn))
+    else if ((pHeater->heaterCoolDownState == true) && (temperature <= (float)pHeater->tempSetPointLowOn))
     {
-      icase = 3;
       pHeater->heaterCoolDownState = false;
       pHeater->relayState = relayStateOn;
     }
     else // In cool down but have not reached the Low Set Point
     {
-      icase = 4;
       pHeater->relayState = relayStateOff;
     }
   }
   else  // Heater Disabled or Outside the percentage limits of the cycle
   {
-    icase = 9;
     pHeater->relayState = relayStateOff;
   }
 }
@@ -317,10 +308,10 @@ void PeriodicOutputTemps()
   {
     outputTempPeriodic = false;
 
-    intTempCUF =  (uint16_t) (thermocoupleUpperFront + 0.5);
-    intTempCUR =  (uint16_t) (thermocoupleUpperRear  + 0.5);
-    intTempCLF =  (uint16_t) (thermocoupleLowerFront + 0.5);
-    intTempCLR =  (uint16_t) (thermocoupleLowerRear  + 0.5);
+    intTempCUF =  (uint16_t) (heaterParmsUpperFront.thermocouple + 0.5);
+    intTempCUR =  (uint16_t) (heaterParmsUpperRear.thermocouple  + 0.5);
+    intTempCLF =  (uint16_t) (heaterParmsLowerFront.thermocouple + 0.5);
+    intTempCLR =  (uint16_t) (heaterParmsLowerRear.thermocouple  + 0.5);
     //    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
     intTempCFan = getA2DReadingForPin(ANALOG_THERMO_FAN);
 
@@ -744,10 +735,10 @@ void stateStandbyUpdate()
     poStateMachine.transitionTo(stateTurnOnDlb);
   }
   else if ((thermocoupleFan > COOL_DOWN_EXIT_FAN_TEMP + 15) ||
-      (thermocoupleUpperFront > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-      (thermocoupleUpperRear  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-      (thermocoupleLowerFront > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-      (thermocoupleLowerRear  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
+      (heaterParmsUpperFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+      (heaterParmsUpperRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+      (heaterParmsLowerFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+      (heaterParmsLowerRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
   {
     poStateMachine.transitionTo(stateCoolDown);
   }
@@ -873,10 +864,10 @@ void stateCoolDownUpdate()
 
   // For now just check cool down on fan
   if ((thermocoupleFan <= COOL_DOWN_EXIT_FAN_TEMP) &&
-      (thermocoupleUpperFront <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (thermocoupleUpperRear  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (thermocoupleLowerFront <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (thermocoupleLowerRear  <= COOL_DOWN_EXIT_HEATER_TEMP))
+      (heaterParmsUpperFront.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+      (heaterParmsUpperRear.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+      (heaterParmsLowerFront.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+      (heaterParmsLowerRear.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP))
   {
     CoolingFanControl(false);
     poStateMachine.transitionTo(stateStandby);
