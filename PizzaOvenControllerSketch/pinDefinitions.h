@@ -30,8 +30,8 @@
 
 #define HEATER_UPPER_FRONT_DLB     ( 8) //Relay that provides L1 to the triac, must be ON for heat
 #define HEATER_UPPER_REAR_DLB      ( 9) //Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_ENABLE_UPPER_FRONT  (A1) // triac output
-#define HEATER_ENABLE_UPPER_REAR   (A0) // triac output
+#define HEATER_ENABLE_UPPER_FRONT  (A0) // triac output
+#define HEATER_ENABLE_UPPER_REAR   (A1) // triac output
 
 // Lower heater relays - These are cascaded.  Only turn on one at a time.
 #define HEATER_ENABLE_LOWER_FRONT  (10) // relay output
@@ -45,11 +45,17 @@
 #define DLB_STATUS_AC_INPUT        ( 4) //AC Intput that indicates the status of the L2 panel mount DLB relays
 
 // Temperature inputs
-#define ANALOG_THERMO_UPPER_FRONT  (A2)
-#define ANALOG_THERMO_UPPER_REAR   (A3)
-#define ANALOG_THERMO_LOWER_FRONT  (A6)
-#define ANALOG_THERMO_LOWER_REAR   (A7)
+#define ANALOG_THERMO_UPPER_FRONT  (A7)
+#define ANALOG_THERMO_UPPER_REAR   (A6)
+#define ANALOG_THERMO_LOWER_FRONT  (A2)
+#define ANALOG_THERMO_LOWER_REAR   (A3)
 #define ANALOG_THERMO_FAN          (A4)
+
+//#define ANALOG_THERMO_UPPER_FRONT  (A2)
+//#define ANALOG_THERMO_UPPER_REAR   (A3)
+//#define ANALOG_THERMO_LOWER_FRONT  (A6)
+//#define ANALOG_THERMO_LOWER_REAR   (A7)
+//#define ANALOG_THERMO_FAN          (A4)
 
 #endif
 

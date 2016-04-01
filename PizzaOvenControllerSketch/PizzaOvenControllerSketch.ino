@@ -91,7 +91,7 @@ uint16_t countOutputTempPeriodic = 0;
 
 // Heater cycle time in multiples of 1 second
 uint16_t triacPeriodSeconds = 4;
-uint16_t relayPeriodSeconds = 16;
+uint16_t relayPeriodSeconds = 60;
 
 struct HeaterParameters
 {
@@ -112,10 +112,10 @@ struct HeaterParameters
   };
 };
 
-HeaterParameters heaterParmsUpperFront = {true,   1800, 1900,  0, 80, 0, 0, relayStateOff, false, 0.0};
-HeaterParameters heaterParmsUpperRear  = {true,   1800, 1900,  22, 100, 0, 0, relayStateOff, false, 0.0};
-HeaterParameters heaterParmsLowerFront = {true,   729,  750,   60, 100, 0, 0, relayStateOff, false, 0.0};
-HeaterParameters heaterParmsLowerRear  = {true,   711,  730,   0,  33, 0, 0, relayStateOff, false, 0.0};
+HeaterParameters heaterParmsUpperFront = {true, 1200, 1300,   0,  70, 0, 0, relayStateOff, false, 0.0};
+HeaterParameters heaterParmsUpperRear  = {true, 1100, 1200,  45, 100, 0, 0, relayStateOff, false, 0.0};
+HeaterParameters heaterParmsLowerFront = {true,  600,  650,  71, 100, 0, 0, relayStateOff, false, 0.0};
+HeaterParameters heaterParmsLowerRear  = {true,  575,  625,   0,  40, 0, 0, relayStateOff, false, 0.0};
 HeaterParameters dummyHeaterParameters;
 
 // convenience array, could go into flash
@@ -150,7 +150,7 @@ float readAD8495KTC(uint8_t pin);
 void handleRelayWatchdog(void);
 
 
-#define FILTER_FACTOR (0.1)
+#define FILTER_FACTOR (0.005)
 float thermistorFilter(float filteredValue, float newReading)
 {
   return (newReading * FILTER_FACTOR) + (filteredValue * (1.0 - FILTER_FACTOR));
@@ -159,6 +159,19 @@ float thermistorFilter(float filteredValue, float newReading)
 void readThermocouples(void)
 {
   static uint8_t nextReading = 0;
+  static uint32_t oldTime = 0;
+  uint32_t newTime = millis();
+  
+  if (newTime > oldTime)
+  {
+    if ((newTime - oldTime) < 10)
+    {
+      return;  
+    }
+  }
+  
+  oldTime = newTime;
+  
   switch (nextReading++) {
     case 0:
       heaterParmsUpperFront.thermocouple = thermistorFilter(heaterParmsUpperFront.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
@@ -696,7 +709,6 @@ bool CharValidDigit(unsigned char digit)
   return retVal;
 }
 
-//uint16_t GetInputValue()
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf)
 {
   uint16_t inputValue = 0;
@@ -808,9 +820,19 @@ void stateHeatCycleEnter()
 
 void stateHeatCycleUpdate()
 {
-  //    if((liveCount % 100) == 0)
-  //      Serial.println("HU");
+  static uint32_t oldTime = 0;
+  uint32_t newTime = millis();
 
+  // only update the relays periodically
+  if (oldTime < newTime)
+  {
+    if ((newTime - oldTime) < 7)
+    {
+      return;
+    }
+  }
+  oldTime = newTime;
+  
   // Save working value triacTimeBase since can be updated by interrupt
   currentTriacTimerCounter = triacTimeBase;
   currentRelayTimerCounter = relayTimeBase;
