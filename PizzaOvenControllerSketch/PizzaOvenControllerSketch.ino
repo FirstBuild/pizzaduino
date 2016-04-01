@@ -149,25 +149,28 @@ void HeaterTimerInterrupt();
 float readAD8495KTC(uint8_t pin);
 void handleRelayWatchdog(void);
 
+
+#define FILTER_FACTOR (0.1)
+float thermistorFilter(float filteredValue, float newReading)
+{
+  return (newReading * FILTER_FACTOR) + (filteredValue * (1.0 - FILTER_FACTOR));
+}
+
 void readThermocouples(void)
 {
   static uint8_t nextReading = 0;
-  // TODO: Don't make this blocking.  Interact with the A2D
-  //       registers directly.  Interleaving the TC readings
-  //       with the relay watchdogs is a total kludge.
-  handleRelayWatchdog();
   switch (nextReading++) {
     case 0:
-      heaterParmsUpperFront.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
+      heaterParmsUpperFront.thermocouple = thermistorFilter(heaterParmsUpperFront.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
       break;
     case 1:
-      heaterParmsUpperRear.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
+      heaterParmsUpperRear.thermocouple = thermistorFilter(heaterParmsUpperRear.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
       break;
     case 2:
-      heaterParmsLowerFront.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
+      heaterParmsLowerFront.thermocouple = thermistorFilter(heaterParmsLowerFront.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
       break;
     case 3:
-      heaterParmsLowerRear.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+      heaterParmsLowerRear.thermocouple = thermistorFilter(heaterParmsLowerRear.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
       break;
     case 4:
       thermocoupleFan = InputThermocoupleFan();
@@ -193,6 +196,17 @@ void ConvertHeaterPercentCounts()
 
   heaterParmsLowerRear.heaterCountsOn   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
   heaterParmsLowerRear.heaterCountsOff  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+
+  Serial.print("Relay Period: ");
+  Serial.println(relayPeriodSeconds);
+  Serial.print("LF on percent: ");
+  Serial.println(heaterParmsLowerFront.onPercent);
+  Serial.print("LF on counts: ");
+  Serial.println(heaterParmsLowerFront.heaterCountsOn);
+  Serial.print("LF off percent: ");
+  Serial.println(heaterParmsLowerFront.offPercent);
+  Serial.print("LF off counts: ");
+  Serial.println(heaterParmsLowerFront.heaterCountsOff);
 }
 
 void UpdateHeaterHardware()
@@ -270,25 +284,24 @@ void UpdateHeatControl(HeaterParameters *pHeater, uint16_t currentCounterTimer)
     temperature = pHeater->thermocouple;
 
     // If not in cool down and less than High Set Point Turn on Heater
-    if ((pHeater->heaterCoolDownState == false) && (temperature < (float)pHeater->tempSetPointHighOff))
+    if (pHeater->heaterCoolDownState == false)
     {
       pHeater->relayState = relayStateOn;
-    }
-    // If not in cool down and greater than High Set Point turn off heater and set cool down
-    else if ((pHeater->heaterCoolDownState == false) && (temperature >= (float)pHeater->tempSetPointHighOff))
-    {
-      pHeater->heaterCoolDownState = true;
-      pHeater->relayState = relayStateOff;
+      if (temperature >= (float)pHeater->tempSetPointHighOff)
+      {
+        pHeater->heaterCoolDownState = true;
+        pHeater->relayState = relayStateOff;
+      }
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
-    else if ((pHeater->heaterCoolDownState == true) && (temperature <= (float)pHeater->tempSetPointLowOn))
-    {
-      pHeater->heaterCoolDownState = false;
-      pHeater->relayState = relayStateOn;
-    }
-    else // In cool down but have not reached the Low Set Point
+    else
     {
       pHeater->relayState = relayStateOff;
+      if (temperature <= (float)pHeater->tempSetPointLowOn)
+      {
+        pHeater->heaterCoolDownState = false;
+        pHeater->relayState = relayStateOn;
+      }
     }
   }
   else  // Heater Disabled or Outside the percentage limits of the cycle
@@ -338,16 +351,20 @@ void PeriodicOutputTemps()
 //------------------------------------------
 void HeaterTimerInterrupt()
 {
-  triacTimeBase++;
-
-  if (triacTimeBase > (MILLISECONDS_PER_SECOND * triacPeriodSeconds))
+  if (triacTimeBase < (MILLISECONDS_PER_SECOND * triacPeriodSeconds))
+  {
+    triacTimeBase++;
+  }
+  else
   {
     triacTimeBase = 0;
   }
 
-  relayTimeBase++;
-
-  if (relayTimeBase > (MILLISECONDS_PER_SECOND * relayPeriodSeconds))
+  if (relayTimeBase < (MILLISECONDS_PER_SECOND * relayPeriodSeconds))
+  {
+    relayTimeBase++;
+  }
+  else
   {
     relayTimeBase = 0;
   }
@@ -568,6 +585,7 @@ void handleIncomingCommands(void)
               {
                 GetInputValue(&pHeaterParameter->offPercent, &receivedCommandBuffer[2]);
               }
+              ConvertHeaterPercentCounts();
             }
             else
             {
@@ -735,10 +753,10 @@ void stateStandbyUpdate()
     poStateMachine.transitionTo(stateTurnOnDlb);
   }
   else if ((thermocoupleFan > COOL_DOWN_EXIT_FAN_TEMP + 15) ||
-      (heaterParmsUpperFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-      (heaterParmsUpperRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-      (heaterParmsLowerFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-      (heaterParmsLowerRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
+           (heaterParmsUpperFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+           (heaterParmsUpperRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+           (heaterParmsLowerFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+           (heaterParmsLowerRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
   {
     poStateMachine.transitionTo(stateCoolDown);
   }
