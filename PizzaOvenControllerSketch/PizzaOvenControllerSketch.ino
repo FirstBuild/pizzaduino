@@ -196,17 +196,6 @@ void ConvertHeaterPercentCounts()
 
   heaterParmsLowerRear.heaterCountsOn   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
   heaterParmsLowerRear.heaterCountsOff  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
-
-  Serial.print("Relay Period: ");
-  Serial.println(relayPeriodSeconds);
-  Serial.print("LF on percent: ");
-  Serial.println(heaterParmsLowerFront.onPercent);
-  Serial.print("LF on counts: ");
-  Serial.println(heaterParmsLowerFront.heaterCountsOn);
-  Serial.print("LF off percent: ");
-  Serial.println(heaterParmsLowerFront.offPercent);
-  Serial.print("LF off counts: ");
-  Serial.println(heaterParmsLowerFront.heaterCountsOff);
 }
 
 void UpdateHeaterHardware()
