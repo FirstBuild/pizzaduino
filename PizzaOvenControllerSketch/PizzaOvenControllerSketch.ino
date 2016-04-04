@@ -32,6 +32,13 @@
 #include "relayBoost.h"
 #include "relayDriver.h"
 #include "pizzaMemory.h"
+#include "PID_v1.h"
+
+//#define ENABLE_PID_AUTOTUNE
+
+#ifdef ENABLE_PID_AUTOTUNE
+#include "PID_AutoTune_v0.h"
+#endif
 
 //------------------------------------------
 // Macros
@@ -45,8 +52,8 @@
 //------------------------------------------
 
 // For now just check cool down on fan
-#define COOL_DOWN_EXIT_FAN_TEMP				((float)100.0)  // 100 degrees F
-#define COOL_DOWN_EXIT_HEATER_TEMP		((float)150.0)  // 150 degrees F
+#define COOL_DOWN_EXIT_FAN_TEMP				((double)100.0)  // 100 degrees F
+#define COOL_DOWN_EXIT_HEATER_TEMP		((double)150.0)  // 150 degrees F
 
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
@@ -100,11 +107,11 @@ typedef struct Heater
   uint32_t heaterCountsOff;
   RelayState relayState;
   bool heaterCoolDownState;
-  float thermocouple;
+  double thermocouple;
 };
 
 Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
-Heater upperRearHeater  = {{true, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0.0};
+Heater upperRearHeater  = {{false, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0.0};
 Heater lowerFrontHeater = {{true,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0.0};
 Heater lowerRearHeater  = {{true,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0.0};
 Heater dummyHeater;
@@ -119,9 +126,23 @@ Heater *aHeaters[5] =
   &lowerRearHeater
 };
 
+// PID stuff
+double Setpoint = 1000;
+double Output;
+PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1, 1, 1, DIRECT);
+#ifdef ENABLE_PID_AUTOTUNE
+double aTuneStep = 5, aTuneNoise = 1, aTuneStartValue = 50;
+unsigned int aTuneLookBack = 20;
+boolean tuning = false;
+void changeAutoTune();
+void AutoTuneHelper(boolean start);
+PID_ATune aTune(&upperFrontHeater.thermocouple, &Output);
+byte ATuneModeRemember = 2;
+#endif
+
 volatile bool outputTempPeriodic = false;
 
-float thermocoupleFan = 0.0;
+double thermocoupleFan = 0.0;
 
 //------------------------------------------
 // Prototypes
@@ -130,20 +151,19 @@ void ConvertHeaterPercentCounts();
 void UpdateHeaterHardware();
 void AllHeatersOffStateClear();
 void CoolingFanControl(boolean control);
-float AnalogThermocoupleTemp(uint16_t rawA2D);
-float InputThermocoupleFan();
+double AnalogThermocoupleTemp(uint16_t rawA2D);
+double InputThermocoupleFan();
 void readThermocouples(void);
 void PeriodicOutputTemps();
 bool CharValidDigit(unsigned char digit);
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
 void HeaterTimerInterrupt();
-float readAD8495KTC(uint8_t pin);
 void handleRelayWatchdog(void);
 void saveParametersToMemory(void);
 void readParametersFromMemory(void);
 
 #define FILTER_FACTOR (0.005)
-float thermistorFilter(float filteredValue, float newReading)
+double thermistorFilter(double filteredValue, double newReading)
 {
   return (newReading * FILTER_FACTOR) + (filteredValue * (1.0 - FILTER_FACTOR));
 }
@@ -246,19 +266,19 @@ void CoolingFanControl(boolean control)
   }
 }
 
-float AnalogThermocoupleTemp(uint16_t rawA2D)
+double AnalogThermocoupleTemp(uint16_t rawA2D)
 {
-  float analogVoltage;
-  float tempC;
+  double analogVoltage;
+  double tempC;
 
-  analogVoltage = (float)rawA2D * ANALOG_REFERENCE_VOLTAGE / 1023.0;
+  analogVoltage = (double)rawA2D * ANALOG_REFERENCE_VOLTAGE / 1023.0;
   tempC = (analogVoltage - 1.25)  / 0.005;
   return tempC;
 }
 
-float InputThermocoupleFan()
+double InputThermocoupleFan()
 {
-  float tempC;
+  double tempC;
 
   //	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_FAN));
 
@@ -268,7 +288,7 @@ float InputThermocoupleFan()
 
 void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
 {
-  float temperature;
+  double temperature;
 
   pHeater->relayState = relayStateOff;
   if ((pHeater->parameter.enabled == true) &&
@@ -281,7 +301,7 @@ void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
     if (pHeater->heaterCoolDownState == false)
     {
       pHeater->relayState = relayStateOn;
-      if (temperature >= (float)pHeater->parameter.tempSetPointHighOff)
+      if (temperature >= (double)pHeater->parameter.tempSetPointHighOff)
       {
         pHeater->heaterCoolDownState = true;
         pHeater->relayState = relayStateOff;
@@ -291,7 +311,7 @@ void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
     else
     {
       pHeater->relayState = relayStateOff;
-      if (temperature <= (float)pHeater->parameter.tempSetPointLowOn)
+      if (temperature <= (double)pHeater->parameter.tempSetPointLowOn)
       {
         pHeater->heaterCoolDownState = false;
         pHeater->relayState = relayStateOn;
@@ -302,6 +322,24 @@ void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
   {
     pHeater->relayState = relayStateOff;
   }
+}
+
+void UpdateHeatControlWithPID(Heater *pHeater, uint16_t currentCounterTimer)
+{
+  double temperature;
+
+  pHeater->relayState = relayStateOff;
+  if ((pHeater->parameter.enabled == true) &&
+      (currentCounterTimer >= pHeater->heaterCountsOn) &&
+      (currentCounterTimer <= pHeater->heaterCountsOff))
+  {
+    pHeater->relayState = relayStateOn;
+  }
+  else  // Heater Disabled or Outside the percentage limits of the cycle
+  {
+    pHeater->relayState = relayStateOff;
+  }
+
 }
 
 void PeriodicOutputTemps()
@@ -337,6 +375,25 @@ void PeriodicOutputTemps()
     Serial.print(powerButtonIsOn());
     Serial.print(F(" L2DLB "));
     Serial.println(l2DlbIsOn());
+
+#ifdef ENABLE_PID_AUTOTUNE
+    Serial.print("KP: ");
+    Serial.print(upperFrontPID.GetKp());
+    Serial.print(", KI: ");
+    Serial.print(upperFrontPID.GetKi());
+    Serial.print(", KD: ");
+    Serial.print(upperFrontPID.GetKd());
+    if (tuning)
+    {
+      Serial.print(" <Tuning ");
+      Serial.print(Output);
+      Serial.println(">");
+    }
+    else
+    {
+      Serial.println("");
+    }
+#endif
   }
 }
 
@@ -459,6 +516,10 @@ void setup()
   adcReadInit(ANALOG_THERMO_FAN);
 
   ConvertHeaterPercentCounts();
+
+  // PID
+  upperFrontPID.SetMode(AUTOMATIC);
+  upperFrontPID.SetOutputLimits(0, 90);
 
   Serial.println(F("Initialization comlete."));
 }
@@ -690,6 +751,28 @@ void handleIncomingCommands(void)
           }
           break;
 
+#ifdef ENABLE_PID_AUTOTUNE
+        // PID auto tune
+        case '!':
+          if ((lastByteReceived == 10) || (lastByteReceived == 13))
+          {
+            if (receivedCommandBufferIndex > 5)
+            {
+              if ((receivedCommandBuffer[1] == 'a') &&
+                  (receivedCommandBuffer[2] == 'u') &&
+                  (receivedCommandBuffer[3] == 't') &&
+                  (receivedCommandBuffer[4] == 'o'))
+              {
+                Serial.println("Engaging auto tune mode.");
+                tuning = false;
+                changeAutoTune();
+                tuning = true;
+              }
+            }
+          }
+          break;
+#endif
+
         case 10:
         case 13:
           // ignore cr/lf as a command
@@ -729,6 +812,32 @@ void loop()
 
   PeriodicOutputTemps();
   handleRelayWatchdog();
+
+  // PID
+#ifdef ENABLE_PID_AUTOTUNE
+  if (tuning)
+  {
+    byte val = (aTune.Runtime());
+    if (val != 0)
+    {
+      tuning = false;
+    }
+    if (!tuning)
+    { //we're done, set the tuning parameters
+      Serial.println("Tuning complete.");
+      upperFrontPID.SetTunings(aTune.GetKp(), aTune.GetKi(), aTune.GetKd());
+      AutoTuneHelper(false);
+    }
+  }
+  else
+  {
+    upperFrontPID.Compute();
+  }
+#else
+  upperFrontPID.Compute();
+#endif
+  upperFrontHeater.parameter.offPercent = Output;
+  ConvertHeaterPercentCounts();
 }
 
 bool CharValidDigit(unsigned char digit)
@@ -874,7 +983,8 @@ void stateHeatCycleUpdate()
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
     CoolingFanControl(true);
-    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+    //    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
 
     UpdateHeaterHardware();
@@ -944,3 +1054,34 @@ void stateCoolDownExit()
 {
   Serial.println(F("CX"));
 }
+
+#ifdef ENABLE_PID_AUTOTUNE
+// PID
+void changeAutoTune()
+{
+  if (!tuning)
+  {
+    //Set the output to the desired starting frequency.
+    Output = aTuneStartValue;
+    aTune.SetNoiseBand(aTuneNoise);
+    aTune.SetOutputStep(aTuneStep);
+    aTune.SetLookbackSec((int)aTuneLookBack);
+    AutoTuneHelper(true);
+    tuning = true;
+  }
+  else
+  { //cancel autotune
+    aTune.Cancel();
+    tuning = false;
+    AutoTuneHelper(false);
+  }
+}
+
+void AutoTuneHelper(boolean start)
+{
+  if (start)
+    ATuneModeRemember = upperFrontPID.GetMode();
+  else
+    upperFrontPID.SetMode(ATuneModeRemember);
+}
+#endif
