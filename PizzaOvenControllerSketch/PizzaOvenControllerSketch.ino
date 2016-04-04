@@ -24,7 +24,6 @@
 
 #include "FiniteStateMachine.h"
 #include "TimerOne.h"
-#include "EEPROM.h"
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
 #include "acInput.h"
@@ -32,6 +31,7 @@
 #include "pinDefinitions.h"
 #include "relayBoost.h"
 #include "relayDriver.h"
+#include "pizzaMemory.h"
 
 //------------------------------------------
 // Macros
@@ -93,39 +93,30 @@ uint16_t countOutputTempPeriodic = 0;
 uint16_t triacPeriodSeconds = 4;
 uint16_t relayPeriodSeconds = 60;
 
-struct HeaterParameters
+typedef struct Heater
 {
-  boolean enabled;
-  union {
-    struct {
-      uint16_t tempSetPointLowOn;   // In integer degrees C
-      uint16_t tempSetPointHighOff; // "      "
-      uint16_t onPercent;       // Time when a heater turns on in percent
-      uint16_t offPercent;      // Time when a heater turns off in percent
-      uint32_t heaterCountsOn;
-      uint32_t heaterCountsOff;
-      RelayState relayState;
-      bool heaterCoolDownState;
-      float thermocouple;
-    };
-    uint16_t parameterArray[4];
-  };
+  HeaterParameters parameter;
+  uint32_t heaterCountsOn;
+  uint32_t heaterCountsOff;
+  RelayState relayState;
+  bool heaterCoolDownState;
+  float thermocouple;
 };
 
-HeaterParameters heaterParmsUpperFront = {true, 1200, 1300,   0,  70, 0, 0, relayStateOff, false, 0.0};
-HeaterParameters heaterParmsUpperRear  = {true, 1100, 1200,  45, 100, 0, 0, relayStateOff, false, 0.0};
-HeaterParameters heaterParmsLowerFront = {true,  600,  650,  71, 100, 0, 0, relayStateOff, false, 0.0};
-HeaterParameters heaterParmsLowerRear  = {true,  575,  625,   0,  40, 0, 0, relayStateOff, false, 0.0};
-HeaterParameters dummyHeaterParameters;
+Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
+Heater upperRearHeater  = {{true, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0.0};
+Heater lowerFrontHeater = {{true,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0.0};
+Heater lowerRearHeater  = {{true,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0.0};
+Heater dummyHeater;
 
 // convenience array, could go into flash
-HeaterParameters *aHeaterParameters[5] =
+Heater *aHeaters[5] =
 {
-  &dummyHeaterParameters,
-  &heaterParmsUpperFront,
-  &heaterParmsUpperRear,
-  &heaterParmsLowerFront,
-  &heaterParmsLowerRear
+  &dummyHeater,
+  &upperFrontHeater,
+  &upperRearHeater,
+  &lowerFrontHeater,
+  &lowerRearHeater
 };
 
 volatile bool outputTempPeriodic = false;
@@ -148,7 +139,8 @@ uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
 void HeaterTimerInterrupt();
 float readAD8495KTC(uint8_t pin);
 void handleRelayWatchdog(void);
-
+void saveParametersToMemory(void);
+void readParametersFromMemory(void);
 
 #define FILTER_FACTOR (0.005)
 float thermistorFilter(float filteredValue, float newReading)
@@ -161,29 +153,29 @@ void readThermocouples(void)
   static uint8_t nextReading = 0;
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
-  
+
   if (newTime > oldTime)
   {
     if ((newTime - oldTime) < 10)
     {
-      return;  
+      return;
     }
   }
-  
+
   oldTime = newTime;
-  
+
   switch (nextReading++) {
     case 0:
-      heaterParmsUpperFront.thermocouple = thermistorFilter(heaterParmsUpperFront.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
+      upperFrontHeater.thermocouple = thermistorFilter(upperFrontHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
       break;
     case 1:
-      heaterParmsUpperRear.thermocouple = thermistorFilter(heaterParmsUpperRear.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
+      upperRearHeater.thermocouple = thermistorFilter(upperRearHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
       break;
     case 2:
-      heaterParmsLowerFront.thermocouple = thermistorFilter(heaterParmsLowerFront.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
+      lowerFrontHeater.thermocouple = thermistorFilter(lowerFrontHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
       break;
     case 3:
-      heaterParmsLowerRear.thermocouple = thermistorFilter(heaterParmsLowerRear.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
+      lowerRearHeater.thermocouple = thermistorFilter(lowerRearHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
       break;
     case 4:
       thermocoupleFan = InputThermocoupleFan();
@@ -198,37 +190,37 @@ void readThermocouples(void)
 
 void ConvertHeaterPercentCounts()
 {
-  heaterParmsUpperFront.heaterCountsOn  = (uint16_t)(((uint32_t)heaterParmsUpperFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-  heaterParmsUpperFront.heaterCountsOff = (uint16_t)(((uint32_t)heaterParmsUpperFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperFrontHeater.heaterCountsOn  = (uint16_t)(((uint32_t)upperFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)upperFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  heaterParmsUpperRear.heaterCountsOn   = (uint16_t)(((uint32_t)heaterParmsUpperRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-  heaterParmsUpperRear.heaterCountsOff  = (uint16_t)(((uint32_t)heaterParmsUpperRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperRearHeater.heaterCountsOn   = (uint16_t)(((uint32_t)upperRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperRearHeater.heaterCountsOff  = (uint16_t)(((uint32_t)upperRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  heaterParmsLowerFront.heaterCountsOn  = (uint16_t)(((uint32_t)heaterParmsLowerFront.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
-  heaterParmsLowerFront.heaterCountsOff = (uint16_t)(((uint32_t)heaterParmsLowerFront.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerFrontHeater.heaterCountsOn  = (uint16_t)(((uint32_t)lowerFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)lowerFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 
-  heaterParmsLowerRear.heaterCountsOn   = (uint16_t)(((uint32_t)heaterParmsLowerRear.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
-  heaterParmsLowerRear.heaterCountsOff  = (uint16_t)(((uint32_t)heaterParmsLowerRear.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerRearHeater.heaterCountsOn   = (uint16_t)(((uint32_t)lowerRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerRearHeater.heaterCountsOff  = (uint16_t)(((uint32_t)lowerRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 }
 
 void UpdateHeaterHardware()
 {
-  changeRelayState(HEATER_ENABLE_UPPER_FRONT, heaterParmsUpperFront.relayState);
-  changeRelayState(HEATER_ENABLE_UPPER_REAR, heaterParmsUpperRear.relayState);
-  changeRelayState(HEATER_ENABLE_LOWER_FRONT, heaterParmsLowerFront.relayState);
-  changeRelayState(HEATER_ENABLE_LOWER_REAR, heaterParmsLowerRear.relayState);
+  changeRelayState(HEATER_ENABLE_UPPER_FRONT, upperFrontHeater.relayState);
+  changeRelayState(HEATER_ENABLE_UPPER_REAR, upperRearHeater.relayState);
+  changeRelayState(HEATER_ENABLE_LOWER_FRONT, lowerFrontHeater.relayState);
+  changeRelayState(HEATER_ENABLE_LOWER_REAR, lowerRearHeater.relayState);
 }
 void AllHeatersOffStateClear()
 {
-  heaterParmsUpperFront.relayState = relayStateOff;
-  heaterParmsUpperRear.relayState  = relayStateOff;
-  heaterParmsLowerFront.relayState = relayStateOff;
-  heaterParmsLowerRear.relayState  = relayStateOff;
+  upperFrontHeater.relayState = relayStateOff;
+  upperRearHeater.relayState  = relayStateOff;
+  lowerFrontHeater.relayState = relayStateOff;
+  lowerRearHeater.relayState  = relayStateOff;
 
-  heaterParmsUpperFront.heaterCoolDownState = false;
-  heaterParmsUpperRear.heaterCoolDownState  = false;
-  heaterParmsLowerFront.heaterCoolDownState = false;
-  heaterParmsLowerRear.heaterCoolDownState  = false;
+  upperFrontHeater.heaterCoolDownState = false;
+  upperRearHeater.heaterCoolDownState  = false;
+  lowerFrontHeater.heaterCoolDownState = false;
+  lowerRearHeater.heaterCoolDownState  = false;
 
   UpdateHeaterHardware();
 
@@ -274,12 +266,12 @@ float InputThermocoupleFan()
   return tempC;
 }
 
-void UpdateHeatControl(HeaterParameters *pHeater, uint16_t currentCounterTimer)
+void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
 {
   float temperature;
 
   pHeater->relayState = relayStateOff;
-  if ((pHeater->enabled == true) &&
+  if ((pHeater->parameter.enabled == true) &&
       (currentCounterTimer >= pHeater->heaterCountsOn) &&
       (currentCounterTimer <= pHeater->heaterCountsOff))
   {
@@ -289,7 +281,7 @@ void UpdateHeatControl(HeaterParameters *pHeater, uint16_t currentCounterTimer)
     if (pHeater->heaterCoolDownState == false)
     {
       pHeater->relayState = relayStateOn;
-      if (temperature >= (float)pHeater->tempSetPointHighOff)
+      if (temperature >= (float)pHeater->parameter.tempSetPointHighOff)
       {
         pHeater->heaterCoolDownState = true;
         pHeater->relayState = relayStateOff;
@@ -299,7 +291,7 @@ void UpdateHeatControl(HeaterParameters *pHeater, uint16_t currentCounterTimer)
     else
     {
       pHeater->relayState = relayStateOff;
-      if (temperature <= (float)pHeater->tempSetPointLowOn)
+      if (temperature <= (float)pHeater->parameter.tempSetPointLowOn)
       {
         pHeater->heaterCoolDownState = false;
         pHeater->relayState = relayStateOn;
@@ -323,27 +315,27 @@ void PeriodicOutputTemps()
   {
     outputTempPeriodic = false;
 
-    intTempCUF =  (uint16_t) (heaterParmsUpperFront.thermocouple + 0.5);
-    intTempCUR =  (uint16_t) (heaterParmsUpperRear.thermocouple  + 0.5);
-    intTempCLF =  (uint16_t) (heaterParmsLowerFront.thermocouple + 0.5);
-    intTempCLR =  (uint16_t) (heaterParmsLowerRear.thermocouple  + 0.5);
+    intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
+    intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
+    intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
+    intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
     //    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
     intTempCFan = getA2DReadingForPin(ANALOG_THERMO_FAN);
 
-    Serial.print("Temps ");
+    Serial.print(F("Temps "));
     Serial.print(intTempCUF);
-    Serial.print(" ");
+    Serial.print(F(" "));
     Serial.print(intTempCUR);
-    Serial.print(" ");
+    Serial.print(F(" "));
     Serial.print(intTempCLF);
-    Serial.print(" ");
+    Serial.print(F(" "));
     Serial.print(intTempCLR);
-    Serial.print(" ");
+    Serial.print(F(" "));
     Serial.println(intTempCFan);
 
-    Serial.print("Power ");
+    Serial.print(F("Power "));
     Serial.print(powerButtonIsOn());
-    Serial.print(" L2DLB ");
+    Serial.print(F(" L2DLB "));
     Serial.println(l2DlbIsOn());
   }
 }
@@ -387,15 +379,52 @@ void initializeRelayPin(uint8_t pin)
   relayDriverInit(pin, relayStateOff);
 }
 
+void saveParametersToMemory(void)
+{
+  pizzaMemoryWrite((uint8_t*)&upperFrontHeater.parameter, offsetof(MemoryStore, upperFrontHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryWrite((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryWrite((uint8_t*)&lowerFrontHeater.parameter, offsetof(MemoryStore, lowerFrontHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryWrite((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryWrite((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
+  pizzaMemoryWrite((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
+}
+
+void readParametersFromMemory(void)
+{
+  pizzaMemoryRead((uint8_t*)&upperFrontHeater.parameter, offsetof(MemoryStore, upperFrontHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryRead((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryRead((uint8_t*)&lowerFrontHeater.parameter, offsetof(MemoryStore, lowerFrontHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryRead((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
+  pizzaMemoryRead((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
+  pizzaMemoryRead((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
+}
+
 //------------------------------------------
 // Setup Routines
 //------------------------------------------
 void setup()
 {
-  acInputsInit();
+  pizzaMemoryReturnTypes pizzaMemoryInitResponse;
 
   Serial.begin(9600);
-  Serial.println("BLE Arduino Slave");
+  Serial.println(F("Starting pizza oven..."));
+
+  pizzaMemoryInitResponse = pizzaMemoryInit();
+
+  printHeaterTemperatureParameters("Upper front before: ", upperFrontHeater.parameter.parameterArray);
+  if (pizzaMemoryWasEmpty == pizzaMemoryInitResponse)
+  {
+    Serial.println(F("Initializing empty EEPROM memory."));
+    saveParametersToMemory();
+  }
+  else
+  {
+    Serial.println(F("Reading parameters from EEPROM memory."));
+    readParametersFromMemory();
+  }
+  printHeaterTemperatureParameters("Upper front after: ", upperFrontHeater.parameter.parameterArray);
+
+  acInputsInit();
 
   // Initialize Timer1
   Timer1.initialize(TIMER1_PERIOD_MICRO_SEC * TIMER1_PERIOD_CLOCK_FACTOR);
@@ -431,7 +460,7 @@ void setup()
 
   ConvertHeaterPercentCounts();
 
-  Serial.println("Start");
+  Serial.println(F("Initialization comlete."));
 }
 
 void handleRelayWatchdog(void)
@@ -499,11 +528,11 @@ void handleIncomingCommands(void)
         */
 
         case 'v': // query protocol version
-          Serial.print("V ");
+          Serial.print(F("V "));
           Serial.print(PROTOCOL_MAJOR_VERSION);
-          Serial.print(".");
+          Serial.print(F("."));
           Serial.print(PROTOCOL_MINOR_VERSION);
-          Serial.print(" bugfix ");
+          Serial.print(F(" bugfix "));
           Serial.println(PROTOCOL_BUGFIX_VERSION);
           receivedCommandBufferIndex = 0;
           break;
@@ -516,22 +545,22 @@ void handleIncomingCommands(void)
               case '0' :
                 //              strLen = sprintf(formatStr, "nTimes %u\n",
                 //                               triacPeriodSeconds);
-                Serial.print("nTimes ");
+                Serial.print(F("nTimes "));
                 Serial.print(triacPeriodSeconds);
                 Serial.print(" ");
                 Serial.println(relayPeriodSeconds);
                 break;
               case '1' :
-                printHeaterTemperatureParameters("UF ", heaterParmsUpperFront.parameterArray);
+                printHeaterTemperatureParameters("UF ", upperFrontHeater.parameter.parameterArray);
                 break;
               case '2' :
-                printHeaterTemperatureParameters("UR ", heaterParmsUpperRear.parameterArray);
+                printHeaterTemperatureParameters("UR ", upperRearHeater.parameter.parameterArray);
                 break;
               case '3' :
-                printHeaterTemperatureParameters("LF ", heaterParmsLowerFront.parameterArray);
+                printHeaterTemperatureParameters("LF ", lowerFrontHeater.parameter.parameterArray);
                 break;
               case '4' :
-                printHeaterTemperatureParameters("LR ", heaterParmsLowerRear.parameterArray);
+                printHeaterTemperatureParameters("LR ", lowerRearHeater.parameter.parameterArray);
                 break;
               default:
                 Serial.print(F("DEBUG unknown command received for the 'p' command: "));
@@ -548,18 +577,19 @@ void handleIncomingCommands(void)
           // wait for CR or LF
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
-            HeaterParameters *pHeaterParameter;
+            Heater *pHeater;
             if (CharValidDigit(receivedCommandBuffer[1]) && ((receivedCommandBuffer[1] - '0') < 5))
             {
-              pHeaterParameter = aHeaterParameters[(receivedCommandBuffer[1] - '0')];
+              pHeater = aHeaters[(receivedCommandBuffer[1] - '0')];
               if (receivedCommandBuffer[0] == 'l')
               {
-                GetInputValue(&pHeaterParameter->tempSetPointLowOn, &receivedCommandBuffer[2]);
+                GetInputValue(&pHeater->parameter.tempSetPointLowOn, &receivedCommandBuffer[2]);
               }
               else
               {
-                GetInputValue(&pHeaterParameter->tempSetPointHighOff, &receivedCommandBuffer[2]);
+                GetInputValue(&pHeater->parameter.tempSetPointHighOff, &receivedCommandBuffer[2]);
               }
+              saveParametersToMemory();
             }
             else
             {
@@ -575,19 +605,20 @@ void handleIncomingCommands(void)
           // wait for CR or LF
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
-            HeaterParameters *pHeaterParameter;
+            Heater *pHeater;
             if (CharValidDigit(receivedCommandBuffer[1]) && ((receivedCommandBuffer[1] - '0') < 5))
             {
-              pHeaterParameter = aHeaterParameters[(receivedCommandBuffer[1] - '0')];
+              pHeater = aHeaters[(receivedCommandBuffer[1] - '0')];
               if (receivedCommandBuffer[0] == 'n')
               {
-                GetInputValue(&pHeaterParameter->onPercent, &receivedCommandBuffer[2]);
+                GetInputValue(&pHeater->parameter.onPercent, &receivedCommandBuffer[2]);
               }
               else
               {
-                GetInputValue(&pHeaterParameter->offPercent, &receivedCommandBuffer[2]);
+                GetInputValue(&pHeater->parameter.offPercent, &receivedCommandBuffer[2]);
               }
               ConvertHeaterPercentCounts();
+              saveParametersToMemory();
             }
             else
             {
@@ -618,6 +649,7 @@ void handleIncomingCommands(void)
                     {
                       triacPeriodSeconds = tempMultiply;
                       ConvertHeaterPercentCounts();
+                      saveParametersToMemory();
                     }
                     else
                     {
@@ -630,6 +662,7 @@ void handleIncomingCommands(void)
                     {
                       relayPeriodSeconds = tempMultiply;
                       ConvertHeaterPercentCounts();
+                      saveParametersToMemory();
                     }
                     else
                     {
@@ -743,7 +776,7 @@ uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf)
 
 void stateStandbyEnter()
 {
-  Serial.println("stateStandbyEnter");
+  Serial.println(F("stateStandbyEnter"));
   digitalWrite(TEN_V_ENABLE, LOW);
 }
 
@@ -754,10 +787,10 @@ void stateStandbyUpdate()
     poStateMachine.transitionTo(stateTurnOnDlb);
   }
   else if ((thermocoupleFan > COOL_DOWN_EXIT_FAN_TEMP + 15) ||
-           (heaterParmsUpperFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-           (heaterParmsUpperRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-           (heaterParmsLowerFront.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-           (heaterParmsLowerRear.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
+           (upperFrontHeater.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+           (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+           (lowerFrontHeater.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
+           (lowerRearHeater.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
   {
     poStateMachine.transitionTo(stateCoolDown);
   }
@@ -765,7 +798,7 @@ void stateStandbyUpdate()
 
 void stateStandbyExit()
 {
-  Serial.println("SX");
+  Serial.println(F("SX"));
 }
 
 /*
@@ -774,7 +807,7 @@ void stateStandbyExit()
 //State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
 void stateTurnOnDlbEnter(void)
 {
-  Serial.println("Entering stateTurnOnDlb.");
+  Serial.println(F("Entering stateTurnOnDlb."));
   digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   CoolingFanControl(true);
 }
@@ -793,7 +826,7 @@ void stateTurnOnDlbUpdate(void)
 
 void stateTurnOnDlbExit(void)
 {
-  Serial.println("Exiting stateTurnOnDlb.");
+  Serial.println(F("Exiting stateTurnOnDlb."));
 }
 
 //------------------------------------------
@@ -805,7 +838,7 @@ uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 
 void stateHeatCycleEnter()
 {
-  Serial.println("stateHeatCycleEnter");
+  Serial.println(F("stateHeatCycleEnter"));
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   triacTimeBase = 0;
@@ -832,7 +865,7 @@ void stateHeatCycleUpdate()
     }
   }
   oldTime = newTime;
-  
+
   // Save working value triacTimeBase since can be updated by interrupt
   currentTriacTimerCounter = triacTimeBase;
   currentRelayTimerCounter = relayTimeBase;
@@ -841,8 +874,8 @@ void stateHeatCycleUpdate()
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
     CoolingFanControl(true);
-    UpdateHeatControl(&heaterParmsUpperFront, currentTriacTimerCounter);
-    UpdateHeatControl(&heaterParmsUpperRear, currentTriacTimerCounter);
+    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+    UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
 
     UpdateHeaterHardware();
 
@@ -853,8 +886,8 @@ void stateHeatCycleUpdate()
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
     CoolingFanControl(true);
-    UpdateHeatControl(&heaterParmsLowerFront, currentRelayTimerCounter);
-    UpdateHeatControl(&heaterParmsLowerRear, currentRelayTimerCounter);
+    UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
 
     UpdateHeaterHardware();
 
@@ -881,7 +914,7 @@ void stateHeatCycleExit()
 
 void stateCoolDownEnter()
 {
-  Serial.println("stateCoolDown");
+  Serial.println(F("stateCoolDown"));
   digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   CoolingFanControl(true);
 }
@@ -893,10 +926,10 @@ void stateCoolDownUpdate()
 
   // For now just check cool down on fan
   if ((thermocoupleFan <= COOL_DOWN_EXIT_FAN_TEMP) &&
-      (heaterParmsUpperFront.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (heaterParmsUpperRear.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (heaterParmsLowerFront.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (heaterParmsLowerRear.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP))
+      (upperFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+      (upperRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+      (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
+      (lowerRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP))
   {
     CoolingFanControl(false);
     poStateMachine.transitionTo(stateStandby);
@@ -909,5 +942,5 @@ void stateCoolDownUpdate()
 
 void stateCoolDownExit()
 {
-  Serial.println("CX");
+  Serial.println(F("CX"));
 }
