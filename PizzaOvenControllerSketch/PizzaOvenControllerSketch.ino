@@ -100,6 +100,9 @@ uint16_t countOutputTempPeriodic = 0;
 uint16_t triacPeriodSeconds = 4;
 uint16_t relayPeriodSeconds = 60;
 
+#define FILTER_POLES 4
+static bool TCsHaveBeenInitialized = false;
+
 typedef struct Heater
 {
   HeaterParameters parameter;
@@ -107,13 +110,17 @@ typedef struct Heater
   uint32_t heaterCountsOff;
   RelayState relayState;
   bool heaterCoolDownState;
-  double thermocouple;
+  union {
+    double thermocouple;
+    double filterOutput[FILTER_POLES];
+  };
 };
 
-Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
-Heater upperRearHeater  = {{false, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0.0};
-Heater lowerFrontHeater = {{true,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0.0};
-Heater lowerRearHeater  = {{true,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0.0};
+//Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
+Heater upperFrontHeater = {{true, 1200, 1300,   0,  80}, 0, 0, relayStateOff, false, 0};
+Heater upperRearHeater  = {{false, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{true,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerRearHeater  = {{true,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0};
 Heater dummyHeater;
 
 // convenience array, could go into flash
@@ -129,10 +136,11 @@ Heater *aHeaters[5] =
 // PID stuff
 double Setpoint = 1000;
 double Output;
-PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1, 1, 1, DIRECT);
+//  run 2 settings PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.0140072, 0.0005294, 0, DIRECT);
+PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.05, 0.0008925, 0.1479627, DIRECT);
 #ifdef ENABLE_PID_AUTOTUNE
-double aTuneStep = 5, aTuneNoise = 1, aTuneStartValue = 50;
-unsigned int aTuneLookBack = 20;
+double aTuneStep = 10, aTuneNoise = 10, aTuneStartValue = 68.7;
+unsigned int aTuneLookBack = 60;
 boolean tuning = false;
 void changeAutoTune();
 void AutoTuneHelper(boolean start);
@@ -162,10 +170,31 @@ void handleRelayWatchdog(void);
 void saveParametersToMemory(void);
 void readParametersFromMemory(void);
 
-#define FILTER_FACTOR (0.005)
-double thermistorFilter(double filteredValue, double newReading)
+//#define FILTER_FACTOR (0.005)
+#define FILTER_FACTOR (0.1)
+double thermistorFilter(double *filteredValue, double newReading)
 {
-  return (newReading * FILTER_FACTOR) + (filteredValue * (1.0 - FILTER_FACTOR));
+  int8_t i;
+
+  if (TCsHaveBeenInitialized)
+  {
+    filteredValue[FILTER_POLES - 1] = (newReading * FILTER_FACTOR) + (filteredValue[FILTER_POLES - 1] * (1.0 - FILTER_FACTOR));
+
+    for (i = FILTER_POLES - 1; i > 0; i--)
+    {
+      filteredValue[i - 1] = (filteredValue[i] * FILTER_FACTOR) + (filteredValue[i - 1] * (1.0 - FILTER_FACTOR));
+    }
+  }
+  else
+  {
+    for (i = 0; i < FILTER_POLES; i++)
+    {
+      filteredValue[i] = newReading;
+    }
+  }
+
+  return filteredValue[0];
+  //  return (newReading * FILTER_FACTOR) + (filteredValue * (1.0 - FILTER_FACTOR));
 }
 
 void readThermocouples(void)
@@ -176,7 +205,7 @@ void readThermocouples(void)
 
   if (newTime > oldTime)
   {
-    if ((newTime - oldTime) < 10)
+    if ((newTime - oldTime) < A2D_READ_PERIOD_MS)
     {
       return;
     }
@@ -186,20 +215,21 @@ void readThermocouples(void)
 
   switch (nextReading++) {
     case 0:
-      upperFrontHeater.thermocouple = thermistorFilter(upperFrontHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
+      upperFrontHeater.thermocouple = thermistorFilter(&upperFrontHeater.filterOutput[0], readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
       break;
     case 1:
-      upperRearHeater.thermocouple = thermistorFilter(upperRearHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
+      upperRearHeater.thermocouple = thermistorFilter(&upperRearHeater.filterOutput[0], readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
       break;
     case 2:
-      lowerFrontHeater.thermocouple = thermistorFilter(lowerFrontHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
+      lowerFrontHeater.thermocouple = thermistorFilter(&lowerFrontHeater.filterOutput[0], readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
       break;
     case 3:
-      lowerRearHeater.thermocouple = thermistorFilter(lowerRearHeater.thermocouple, readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
+      lowerRearHeater.thermocouple = thermistorFilter(&lowerRearHeater.filterOutput[0], readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
       break;
     case 4:
       thermocoupleFan = InputThermocoupleFan();
       nextReading = 0;
+      TCsHaveBeenInitialized = true;
       break;
   }
 }
@@ -370,6 +400,8 @@ void PeriodicOutputTemps()
     Serial.print(intTempCLR);
     Serial.print(F(" "));
     Serial.println(intTempCFan);
+    Serial.print(F(" "));
+    Serial.println(upperFrontHeater.heaterCoolDownState ? 0 : 1);
 
     Serial.print(F("Power "));
     Serial.print(powerButtonIsOn());
@@ -377,21 +409,23 @@ void PeriodicOutputTemps()
     Serial.println(l2DlbIsOn());
 
 #ifdef ENABLE_PID_AUTOTUNE
-    Serial.print("KP: ");
-    Serial.print(upperFrontPID.GetKp());
-    Serial.print(", KI: ");
-    Serial.print(upperFrontPID.GetKi());
-    Serial.print(", KD: ");
-    Serial.print(upperFrontPID.GetKd());
+    Serial.print(F("KP KI KD % Set Tuning, "));
+    Serial.print(upperFrontPID.GetKp(), 7);
+    Serial.print(F(", "));
+    Serial.print(upperFrontPID.GetKi(), 7);
+    Serial.print(F(", "));
+    Serial.print(upperFrontPID.GetKd(), 7);
+    Serial.print(F(", "));
+    Serial.print(Output);
+    Serial.print(F(", "));
+    Serial.print(Setpoint);
     if (tuning)
     {
-      Serial.print(" <Tuning ");
-      Serial.print(Output);
-      Serial.println(">");
+      Serial.println(F(", 1"));
     }
     else
     {
-      Serial.println("");
+      Serial.println(F(", 0"));
     }
 #endif
   }
@@ -831,6 +865,8 @@ void loop()
   }
   else
   {
+    Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
+
     upperFrontPID.Compute();
   }
 #else
@@ -983,8 +1019,8 @@ void stateHeatCycleUpdate()
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
     CoolingFanControl(true);
-    //    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
-    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
+    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+    //    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
 
     UpdateHeaterHardware();
@@ -1066,6 +1102,7 @@ void changeAutoTune()
     aTune.SetNoiseBand(aTuneNoise);
     aTune.SetOutputStep(aTuneStep);
     aTune.SetLookbackSec((int)aTuneLookBack);
+    aTune.SetControlType(1);
     AutoTuneHelper(true);
     tuning = true;
   }
