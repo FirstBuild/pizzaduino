@@ -603,9 +603,9 @@ void handleIncomingCommands(void)
   {
     lastByteReceived = Serial.read();
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
-    Serial.print("DEBUG Char rcvd: [");
-    Serial.print(lastByteReceived);
-    Serial.println("]");
+//    Serial.print("DEBUG Char rcvd: [");
+//    Serial.print(lastByteReceived);
+//    Serial.println("]");
     if (receivedCommandBufferIndex >= RECEVIED_COMMAND_BUFFER_LENGTH)
     {
       Serial.println(F("DEBUG command input buffer exceeded."));
