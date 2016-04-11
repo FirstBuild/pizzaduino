@@ -86,6 +86,9 @@ State stateCoolDown = State(stateCoolDownEnter, stateCoolDownUpdate, stateCoolDo
 
 FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
 
+bool pizzaOvenStartRequested = false;
+bool pizzaOvenStopRequested = false;
+
 //------------------------------------------
 // Global Definitions
 //------------------------------------------
@@ -284,6 +287,7 @@ void CoolingFanControl(boolean control)
 
   if (lastControl != control)
   {
+    Serial.println("DEBUG Changing the state of the cooling fan.");
     if (control == true)
     {
       changeRelayState(COOLING_FAN_SIGNAL, relayStateOn);
@@ -369,7 +373,14 @@ void UpdateHeatControlWithPID(Heater *pHeater, uint16_t currentCounterTimer)
   {
     pHeater->relayState = relayStateOff;
   }
+}
 
+void outputAcInputStates()
+{
+  Serial.print(F("Power "));
+  Serial.print(powerButtonIsOn());
+  Serial.print(F(" L2DLB "));
+  Serial.println(l2DlbIsOn());
 }
 
 void PeriodicOutputTemps()
@@ -403,11 +414,6 @@ void PeriodicOutputTemps()
     Serial.print(F(" "));
     Serial.println(upperFrontHeater.heaterCoolDownState ? 0 : 1);
 
-    Serial.print(F("Power "));
-    Serial.print(powerButtonIsOn());
-    Serial.print(F(" L2DLB "));
-    Serial.println(l2DlbIsOn());
-
 #ifdef ENABLE_PID_AUTOTUNE
     Serial.print(F("KP KI KD % Set Tuning, "));
     Serial.print(upperFrontPID.GetKp(), 7);
@@ -428,6 +434,8 @@ void PeriodicOutputTemps()
       Serial.println(F(", 0"));
     }
 #endif
+    
+    outputAcInputStates();
   }
 }
 
@@ -498,19 +506,19 @@ void setup()
   pizzaMemoryReturnTypes pizzaMemoryInitResponse;
 
   Serial.begin(9600);
-  Serial.println(F("Starting pizza oven..."));
+  Serial.println(F("DEBUG Starting pizza oven..."));
 
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
   printHeaterTemperatureParameters("Upper front before: ", upperFrontHeater.parameter.parameterArray);
   if (pizzaMemoryWasEmpty == pizzaMemoryInitResponse)
   {
-    Serial.println(F("Initializing empty EEPROM memory."));
+    Serial.println(F("DEBUG Initializing empty EEPROM memory."));
     saveParametersToMemory();
   }
   else
   {
-    Serial.println(F("Reading parameters from EEPROM memory."));
+    Serial.println(F("DEBUG Reading parameters from EEPROM memory."));
     readParametersFromMemory();
   }
   printHeaterTemperatureParameters("Upper front after: ", upperFrontHeater.parameter.parameterArray);
@@ -555,7 +563,7 @@ void setup()
   upperFrontPID.SetMode(AUTOMATIC);
   upperFrontPID.SetOutputLimits(0, 90);
 
-  Serial.println(F("Initialization comlete."));
+  Serial.println(F("DEBUG Initialization comlete."));
 }
 
 void handleRelayWatchdog(void)
@@ -595,32 +603,30 @@ void handleIncomingCommands(void)
   {
     lastByteReceived = Serial.read();
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
+    Serial.print("DEBUG Char rcvd: [");
+    Serial.print(lastByteReceived);
+    Serial.println("]");
     if (receivedCommandBufferIndex >= RECEVIED_COMMAND_BUFFER_LENGTH)
     {
       Serial.println(F("DEBUG command input buffer exceeded."));
       receivedCommandBufferIndex = 0;
     }
-    else
+    else if (receivedCommandBufferIndex > 0)
     {
       // attempt to parse the command
       switch (receivedCommandBuffer[0])
       {
-        /*
-          case 's':  // Start Pizza Oven Cycle
+        case 's':  // Start Pizza Oven Cycle
+          pizzaOvenStartRequested = true;
+          Serial.println(F("DEBUG Pizza oven start requested."));
+          receivedCommandBufferIndex = 0;
           break;
 
-          case 'q': // Quit Pizza Oven Cycle
-          Serial.println("Exit");
-          if (poStateMachine.isInState(stateHeatCycle))
-          {
-            poStateMachine.transitionTo(stateCoolDown);
-          }
-          else
-          {
-            Serial.println("Invalid");
-          }
+        case 'q': // Quit Pizza Oven Cycle
+          pizzaOvenStopRequested = true;
+          receivedCommandBufferIndex = 0;
+          Serial.println(F("DEBUG Pizza oven stop requested."));
           break;
-        */
 
         case 'v': // query protocol version
           Serial.print(F("V "));
@@ -833,11 +839,19 @@ uint16_t tempMultiply, tempPercent, tempTemp;
 
 void loop()
 {
+  bool oldPowerButtonState = powerButtonIsOn();
+  bool oldDlbState = l2DlbIsOn();
+
   // Gather inputs and process
   adcReadRun();
   acInputsRun();
   readThermocouples();
   handleIncomingCommands();
+
+  if ((oldPowerButtonState != powerButtonIsOn()) || (oldDlbState != l2DlbIsOn()))
+  {
+    outputAcInputStates();
+  }
 
   poStateMachine.update();
 
@@ -921,13 +935,13 @@ uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf)
 
 void stateStandbyEnter()
 {
-  Serial.println(F("stateStandbyEnter"));
+  Serial.println(F("DEBUG stateStandbyEnter"));
   digitalWrite(TEN_V_ENABLE, LOW);
 }
 
 void stateStandbyUpdate()
 {
-  if (powerButtonIsOn())
+  if (powerButtonIsOn() && pizzaOvenStartRequested)
   {
     poStateMachine.transitionTo(stateTurnOnDlb);
   }
@@ -939,11 +953,14 @@ void stateStandbyUpdate()
   {
     poStateMachine.transitionTo(stateCoolDown);
   }
+
+  pizzaOvenStartRequested = false;
+  pizzaOvenStopRequested = false;
 }
 
 void stateStandbyExit()
 {
-  Serial.println(F("SX"));
+  Serial.println(F("DEBUG SX"));
 }
 
 /*
@@ -952,15 +969,16 @@ void stateStandbyExit()
 //State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
 void stateTurnOnDlbEnter(void)
 {
-  Serial.println(F("Entering stateTurnOnDlb."));
+  Serial.println(F("DEBUG Entering stateTurnOnDlb."));
   digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   CoolingFanControl(true);
 }
 
 void stateTurnOnDlbUpdate(void)
 {
-  if (!powerButtonIsOn())
+  if (!powerButtonIsOn() || pizzaOvenStopRequested)
   {
+    pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
   }
   else if (l2DlbIsOn())
@@ -971,7 +989,7 @@ void stateTurnOnDlbUpdate(void)
 
 void stateTurnOnDlbExit(void)
 {
-  Serial.println(F("Exiting stateTurnOnDlb."));
+  Serial.println(F("DEBUG Exiting stateTurnOnDlb."));
 }
 
 //------------------------------------------
@@ -983,7 +1001,7 @@ uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 
 void stateHeatCycleEnter()
 {
-  Serial.println(F("stateHeatCycleEnter"));
+  Serial.println(F("DEBUG stateHeatCycleEnter"));
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   triacTimeBase = 0;
@@ -1018,7 +1036,7 @@ void stateHeatCycleUpdate()
   // Handle triac control
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
-    CoolingFanControl(true);
+//    CoolingFanControl(true);
     UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
     //    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
@@ -1031,7 +1049,7 @@ void stateHeatCycleUpdate()
   // Handle relay control
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
-    CoolingFanControl(true);
+//    CoolingFanControl(true);
     UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
     UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
 
@@ -1040,15 +1058,16 @@ void stateHeatCycleUpdate()
     oldRelayTimerCounter = currentRelayTimerCounter;
   }
 
-  if (!powerButtonIsOn() || !l2DlbIsOn())
+  if (!powerButtonIsOn() || !l2DlbIsOn() || pizzaOvenStopRequested)
   {
+    pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
   }
 }
 
 void stateHeatCycleExit()
 {
-  Serial.println("HX");
+  Serial.println("DEBUG HX");
   AllHeatersOffStateClear();
 }
 
@@ -1060,7 +1079,7 @@ void stateHeatCycleExit()
 
 void stateCoolDownEnter()
 {
-  Serial.println(F("stateCoolDown"));
+  Serial.println(F("DEBUG stateCoolDown"));
   digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   CoolingFanControl(true);
 }
@@ -1080,15 +1099,16 @@ void stateCoolDownUpdate()
     CoolingFanControl(false);
     poStateMachine.transitionTo(stateStandby);
   }
-  else if (powerButtonIsOn())
+  else if (powerButtonIsOn() && pizzaOvenStartRequested)
   {
+    pizzaOvenStartRequested = false;
     poStateMachine.transitionTo(stateTurnOnDlb);
   }
 }
 
 void stateCoolDownExit()
 {
-  Serial.println(F("CX"));
+  Serial.println(F("DEBUG CX"));
 }
 
 #ifdef ENABLE_PID_AUTOTUNE
