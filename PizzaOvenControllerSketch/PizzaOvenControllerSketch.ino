@@ -34,7 +34,7 @@
 #include "pizzaMemory.h"
 #include "PID_v1.h"
 
-//#define ENABLE_PID_AUTOTUNE
+#define ENABLE_PID_AUTOTUNE
 
 #ifdef ENABLE_PID_AUTOTUNE
 #include "PID_AutoTune_v0.h"
@@ -59,7 +59,8 @@
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
 #define TIMER1_PERIOD_CLOCK_FACTOR	(1) 		// Clock multiplier for Timer1
 #define MILLISECONDS_PER_SECOND		  (1000)  // Count down for a period of 1 second
-#define TIMER1_OUTPUT_TEMP_PERIODIC (1000)  // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
+//#define TIMER1_OUTPUT_TEMP_PERIODIC (1000)  // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
+#define TIMER1_OUTPUT_TEMP_PERIODIC (500)  // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
 
 //------------------------------------------
 //state machine setup
@@ -103,7 +104,7 @@ uint16_t countOutputTempPeriodic = 0;
 uint16_t triacPeriodSeconds = 4;
 uint16_t relayPeriodSeconds = 60;
 
-#define FILTER_POLES 4
+#define FILTER_POLES 2
 static bool TCsHaveBeenInitialized = false;
 
 typedef struct Heater
@@ -120,10 +121,10 @@ typedef struct Heater
 };
 
 //Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
-Heater upperFrontHeater = {{true, 1200, 1300,   0,  80}, 0, 0, relayStateOff, false, 0};
+Heater upperFrontHeater = {{true, 900, 1100,   0,  50}, 0, 0, relayStateOff, false, 0};
 Heater upperRearHeater  = {{false, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerFrontHeater = {{true,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerRearHeater  = {{true,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{false,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerRearHeater  = {{false,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0};
 Heater dummyHeater;
 
 // convenience array, could go into flash
@@ -140,9 +141,20 @@ Heater *aHeaters[5] =
 double Setpoint = 1000;
 double Output;
 //  run 2 settings PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.0140072, 0.0005294, 0, DIRECT);
-PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.05, 0.0008925, 0.1479627, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.05, 0.0008925, 0.1479627, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.942, 0.17084, 0.04271, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.4, 0.015, 0.02, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.6875, 0, 0, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 9.78256766574047, 17.1603333333337, 4.29008333333343, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 5.96380722985162, 17.1603333333337, 4.29008333333343, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.1927678, 0.0031192, 2.9782624, DIRECT);
+//Time KP KI KD Raw Temp % Set Tuning, 797040, 0.1407757, 0.0017002, 2.9140563, 1025.46, 1024, 53.89, 1000.00, 0
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 16.75, 3.9, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.07, 4.43625, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.8, 0.008, 1.5, DIRECT);
+PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.009, 4.4, DIRECT);
 #ifdef ENABLE_PID_AUTOTUNE
-double aTuneStep = 10, aTuneNoise = 10, aTuneStartValue = 68.7;
+double aTuneStep = 7, aTuneNoise = 35;
 unsigned int aTuneLookBack = 60;
 boolean tuning = false;
 void changeAutoTune();
@@ -389,6 +401,12 @@ void PeriodicOutputTemps()
   char formatStr[25];
   uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan;
 
+#define TEMP_BUF_SIZE 10
+  static float tempBuf[TEMP_BUF_SIZE];
+  static uint8_t bufIndex = 0;
+  uint8_t compareIndex;
+  float diff;
+
   // Output Periodic Temperatures
   if (true == outputTempPeriodic)
   {
@@ -401,26 +419,34 @@ void PeriodicOutputTemps()
     //    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
     intTempCFan = getA2DReadingForPin(ANALOG_THERMO_FAN);
 
-    Serial.print(F("Temps "));
-    Serial.print(intTempCUF);
-    Serial.print(F(" "));
-    Serial.print(intTempCUR);
-    Serial.print(F(" "));
-    Serial.print(intTempCLF);
-    Serial.print(F(" "));
-    Serial.print(intTempCLR);
-    Serial.print(F(" "));
-    Serial.println(intTempCFan);
-    Serial.print(F(" "));
-    Serial.println(upperFrontHeater.heaterCoolDownState ? 0 : 1);
+    //    Serial.print(F("Temps "));
+    //    Serial.print(intTempCUF);
+    //    Serial.print(F(" "));
+    //    Serial.print(intTempCUR);
+    //    Serial.print(F(" "));
+    //    Serial.print(intTempCLF);
+    //    Serial.print(F(" "));
+    //    Serial.print(intTempCLR);
+    //    Serial.print(F(" "));
+    //    Serial.println(intTempCFan);
+    //    Serial.print(F(" "));
+    //    Serial.println(upperFrontHeater.heaterCoolDownState ? 0 : 1);
+
+    //    outputAcInputStates();
 
 #ifdef ENABLE_PID_AUTOTUNE
-    Serial.print(F("KP KI KD % Set Tuning, "));
+    Serial.print(F("Time KP KI KD Raw Temp % Set Tuning, "));
+    Serial.print(millis());
+    Serial.print(F(", "));
     Serial.print(upperFrontPID.GetKp(), 7);
     Serial.print(F(", "));
     Serial.print(upperFrontPID.GetKi(), 7);
     Serial.print(F(", "));
     Serial.print(upperFrontPID.GetKd(), 7);
+    Serial.print(F(", "));
+    Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
+    Serial.print(F(", "));
+    Serial.print(intTempCUF);
     Serial.print(F(", "));
     Serial.print(Output);
     Serial.print(F(", "));
@@ -434,8 +460,30 @@ void PeriodicOutputTemps()
       Serial.println(F(", 0"));
     }
 #endif
-    
-    outputAcInputStates();
+
+    // stuff for impulse response testing
+    //    tempBuf[bufIndex] = intTempCUF;
+    //    compareIndex = bufIndex + 1;
+    //    if (compareIndex >= TEMP_BUF_SIZE)
+    //    {
+    //      compareIndex = 0;
+    //    }
+    //    diff = tempBuf[bufIndex] - tempBuf[compareIndex];
+    //    bufIndex++;
+    //    if (bufIndex >= TEMP_BUF_SIZE)
+    //    {
+    //      bufIndex = 0;
+    //    }
+    //    Serial.print(F("Time Setpoint Temp Dutycycle Diff, "));
+    //    Serial.print(millis());
+    //    Serial.print(F(", "));
+    //    Serial.print(Setpoint);
+    //    Serial.print(F(", "));
+    //    Serial.print(intTempCUF);
+    //    Serial.print(F(", "));
+    //    Serial.print(Output);
+    //    Serial.print(F(", "));
+    //    Serial.println(diff);
   }
 }
 
@@ -505,7 +553,7 @@ void setup()
 {
   pizzaMemoryReturnTypes pizzaMemoryInitResponse;
 
-  Serial.begin(9600);
+  Serial.begin(19200);
   Serial.println(F("DEBUG Starting pizza oven..."));
 
   pizzaMemoryInitResponse = pizzaMemoryInit();
@@ -603,9 +651,9 @@ void handleIncomingCommands(void)
   {
     lastByteReceived = Serial.read();
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
-//    Serial.print("DEBUG Char rcvd: [");
-//    Serial.print(lastByteReceived);
-//    Serial.println("]");
+    //    Serial.print("DEBUG Char rcvd: [");
+    //    Serial.print(lastByteReceived);
+    //    Serial.println("]");
     if (receivedCommandBufferIndex >= RECEVIED_COMMAND_BUFFER_LENGTH)
     {
       Serial.println(F("DEBUG command input buffer exceeded."));
@@ -720,6 +768,7 @@ void handleIncomingCommands(void)
               }
               ConvertHeaterPercentCounts();
               saveParametersToMemory();
+              Serial.println(F("Updated duty cycle parameter."));
             }
             else
             {
@@ -841,6 +890,7 @@ void loop()
 {
   bool oldPowerButtonState = powerButtonIsOn();
   bool oldDlbState = l2DlbIsOn();
+  double oldOutput = Output;
 
   // Gather inputs and process
   adcReadRun();
@@ -884,10 +934,12 @@ void loop()
     upperFrontPID.Compute();
   }
 #else
+  Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperFrontPID.Compute();
 #endif
-  upperFrontHeater.parameter.offPercent = Output;
   ConvertHeaterPercentCounts();
+  Output = (Output + 3 * oldOutput) / 4;
+  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
 }
 
 bool CharValidDigit(unsigned char digit)
@@ -1036,9 +1088,9 @@ void stateHeatCycleUpdate()
   // Handle triac control
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
-//    CoolingFanControl(true);
-    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
-    //    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
+    //    CoolingFanControl(true);
+    //UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
 
     UpdateHeaterHardware();
@@ -1049,7 +1101,7 @@ void stateHeatCycleUpdate()
   // Handle relay control
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
-//    CoolingFanControl(true);
+    //    CoolingFanControl(true);
     UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
     UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
 
@@ -1118,7 +1170,6 @@ void changeAutoTune()
   if (!tuning)
   {
     //Set the output to the desired starting frequency.
-    Output = aTuneStartValue;
     aTune.SetNoiseBand(aTuneNoise);
     aTune.SetOutputStep(aTuneStep);
     aTune.SetLookbackSec((int)aTuneLookBack);
