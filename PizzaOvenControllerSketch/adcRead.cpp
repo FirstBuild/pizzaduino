@@ -70,7 +70,7 @@ static bool itIsTimeToStartScanning(void)
 void adcReadRun(void)
 {
   uint8_t low, high;
-  
+
   switch (a2dState)
   {
     case a2d_idle:
@@ -116,6 +116,6 @@ void adcReadRun(void)
 
 uint16_t getA2DReadingForPin(uint8_t pin)
 {
-  return adcValue[pin-14];
+  return adcValue[pin - 14];
 }
 
