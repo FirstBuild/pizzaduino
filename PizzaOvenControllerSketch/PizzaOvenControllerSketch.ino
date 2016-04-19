@@ -35,6 +35,7 @@
 #include "PID_v1.h"
 #include <limits.h>
 
+#define USE_PID
 #define ENABLE_PID_TUNING
 
 //------------------------------------------
@@ -105,27 +106,52 @@ static bool TCsHaveBeenInitialized = false;
 
 // From: http://www.schwietering.com/jayduino/filtuino/
 // Low pass bessel filter order=2 alpha1=0.005, 0.25 hz corner freq
+//class  FilterBeLp2
+//{
+//  public:
+//    FilterBeLp2()
+//    {
+//      v[0] = 0.0;
+//      v[1] = 0.0;
+//    }
+//  private:
+//    float v[3];
+//  public:
+//    float step(float x) //class II
+//    {
+//      v[0] = v[1];
+//      v[1] = v[2];
+//      v[2] = (3.857929638054202206e-4 * x)
+//             + (-0.93312011662265637035 * v[0])
+//             + (1.93157694476743468925 * v[1]);
+//      return
+//        (v[0] + v[2])
+//        + 2 * v[1];
+//    }
+//};
+
+//Low pass bessel filter order=2 alpha1=0.0025, 0.125  hz corner freq
 class  FilterBeLp2
 {
   public:
     FilterBeLp2()
     {
-      v[0] = 0.0;
-      v[1] = 0.0;
+      v[0]=0.0;
+      v[1]=0.0;
     }
   private:
     float v[3];
   public:
-    float step(float x) //class II
+    float step(float x) //class II 
     {
       v[0] = v[1];
       v[1] = v[2];
-      v[2] = (3.857929638054202206e-4 * x)
-             + (-0.93312011662265637035 * v[0])
-             + (1.93157694476743468925 * v[1]);
-      return
-        (v[0] + v[2])
-        + 2 * v[1];
+      v[2] = (9.810514574132291022e-5 * x)
+         + (-0.96598348806398948163 * v[0])
+         + (1.96559106748102419004 * v[1]);
+      return 
+         (v[0] + v[2])
+        +2 * v[1];
     }
 };
 
@@ -172,7 +198,9 @@ double Output = 47;
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 16.75, 3.9, DIRECT);
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.07, 4.43625, DIRECT);
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.8, 0.008, 1.5, DIRECT);
-PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.01, 4.4, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.01, 4.4, DIRECT);
+//PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.009, 2.2, DIRECT);
+PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.0, 0.0, 0.0, DIRECT);
 
 volatile bool outputTempPeriodic = false;
 
@@ -397,28 +425,58 @@ void PeriodicOutputTemps()
     //    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
     intTempCFan = getA2DReadingForPin(ANALOG_THERMO_FAN);
 
-    //    Serial.print(F("Temps "));
-    //    Serial.print(intTempCUF);
-    //    Serial.print(F(" "));
-    //    Serial.print(intTempCUR);
-    //    Serial.print(F(" "));
-    //    Serial.print(intTempCLF);
-    //    Serial.print(F(" "));
-    //    Serial.print(intTempCLR);
-    //    Serial.print(F(" "));
-    //    Serial.println(intTempCFan);
-    //    Serial.print(F(" "));
-    //    Serial.println(upperFrontHeater.heaterCoolDownState ? 0 : 1);
+#ifndef ENABLE_PID_TUNING
+    Serial.print(F("Temps "));
+    Serial.print(intTempCUF);
+    Serial.print(F(" "));
+    Serial.print(intTempCUR);
+    Serial.print(F(" "));
+    Serial.print(intTempCLF);
+    Serial.print(F(" "));
+    Serial.print(intTempCLR);
+    Serial.print(F(" "));
+    Serial.println(intTempCFan);
+    Serial.print(F(" "));
+    Serial.println(upperFrontHeater.heaterCoolDownState ? 0 : 1);
 
-    //    outputAcInputStates();
+    outputAcInputStates();
 
+    if(poStateMachine.isInState(stateStandby))
+    {
+        Serial.println(F("State Standby"));
+    }
+    if(poStateMachine.isInState(stateTurnOnDlb))
+    {
+        Serial.println(F("State DLB"));
+    }
+    if(poStateMachine.isInState(stateHeatCycle))
+    {
+        Serial.println(F("State Cooking"));
+    }
+    if(poStateMachine.isInState(stateCoolDown))
+    {
+        Serial.println(F("State Cooldown"));
+    }
+
+    Serial.print(F("Relays "));
+    Serial.print(digitalRead(HEATER_ENABLE_UPPER_FRONT));
+    Serial.print(F(" "));
+    Serial.print(digitalRead(HEATER_ENABLE_UPPER_REAR));
+    Serial.print(F(" "));
+    Serial.print(digitalRead(HEATER_ENABLE_LOWER_FRONT));
+    Serial.print(F(" "));
+    Serial.println(digitalRead(HEATER_ENABLE_LOWER_REAR));
+    
+#endif
+
+#ifdef USE_PID
+#ifdef ENABLE_PID_TUNING
     double pTerm;
     double iTerm;
     double dTerm;
 
     upperFrontPID.GetTerms(&pTerm, &iTerm, &dTerm);
 
-#ifdef ENABLE_PID_TUNING
     Serial.print(F("Time KP KI KD Raw Temp % Set pTerm iTerm dTerm, "));
     Serial.print(millis());
     Serial.print(F(", "));
@@ -442,6 +500,7 @@ void PeriodicOutputTemps()
     Serial.print(F(", "));
     Serial.print(dTerm, 6);
     Serial.println("");
+#endif
 #endif
 
     // stuff for impulse response testing
@@ -652,7 +711,6 @@ void handleIncomingCommands(void)
         case 's':  // Start Pizza Oven Cycle
           pizzaOvenStartRequested = true;
           receivedCommandBufferIndex = 0;
-          upperFrontPID.SetMode(AUTOMATIC);
           Serial.println(F("DEBUG Pizza oven start requested."));
           break;
 
@@ -877,13 +935,13 @@ void loop()
   handleRelayWatchdog();
 
   // PID
-#ifdef ENABLE_PID_TUNING
+#ifdef USE_PID
   Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperFrontPID.Compute();
-#endif
   ConvertHeaterPercentCounts();
   //  Output = (Output + 3 * oldOutput) / 4;
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+#endif
 }
 
 bool CharValidDigit(unsigned char digit)
@@ -1008,6 +1066,9 @@ void stateHeatCycleEnter()
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
+
+  Output = 0.0;
+  upperFrontPID.SetMode(AUTOMATIC);
 }
 
 void stateHeatCycleUpdate()
@@ -1033,8 +1094,12 @@ void stateHeatCycleUpdate()
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
     //    CoolingFanControl(true);
-    //UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+#ifdef USE_PID
     UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
+#else
+    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+#endif
+
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
 
     UpdateHeaterHardware();
@@ -1065,6 +1130,8 @@ void stateHeatCycleExit()
 {
   Serial.println("DEBUG HX");
   AllHeatersOffStateClear();
+  upperFrontPID.SetMode(MANUAL);
+  Output = 0.0;
 }
 
 //------------------------------------------

@@ -163,10 +163,17 @@ void PID::SetMode(int Mode)
  ******************************************************************************/
 void PID::Initialize()
 {
-  ITerm = *myOutput;
-  lastInput = *myInput;
-  if (ITerm > outMax) ITerm = outMax;
-  else if (ITerm < outMin) ITerm = outMin;
+  if (0.0 == ki)
+  {
+    ITerm = 0.0;
+  }
+  else
+  {
+    ITerm = *myOutput;
+    lastInput = *myInput;
+    if (ITerm > outMax) ITerm = outMax;
+    else if (ITerm < outMin) ITerm = outMin;
+  }
 }
 
 /* SetControllerDirection(...)*************************************************
