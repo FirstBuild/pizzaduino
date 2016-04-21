@@ -39,6 +39,13 @@ struct HeaterParameters
   };
 };
 
+struct PidParameters
+{
+  float kp;
+  float ki;
+  float kd;
+};
+
 typedef struct MemoryStore
 {
   HeaterParameters upperFrontHeaterParameters;
@@ -47,6 +54,7 @@ typedef struct MemoryStore
   HeaterParameters lowerRearHeaterParameters;
   uint16_t triacPeriodSeconds;
   uint16_t relayPeriodSeconds;
+  PidParameters pidParameters;
 
 } MemoryStore;
 

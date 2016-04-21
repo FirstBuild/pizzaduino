@@ -51,7 +51,7 @@
 
 // For now just check cool down on fan
 #define COOL_DOWN_EXIT_FAN_TEMP				((double)100.0)  // 100 degrees F
-#define COOL_DOWN_EXIT_HEATER_TEMP		((double)150.0)  // 150 degrees F
+#define COOL_DOWN_EXIT_HEATER_TEMP		((double)350.0)  // 150 degrees F
 
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
@@ -136,22 +136,22 @@ class  FilterBeLp2
   public:
     FilterBeLp2()
     {
-      v[0]=0.0;
-      v[1]=0.0;
+      v[0] = 0.0;
+      v[1] = 0.0;
     }
   private:
     float v[3];
   public:
-    float step(float x) //class II 
+    float step(float x) //class II
     {
       v[0] = v[1];
       v[1] = v[2];
       v[2] = (9.810514574132291022e-5 * x)
-         + (-0.96598348806398948163 * v[0])
-         + (1.96559106748102419004 * v[1]);
-      return 
-         (v[0] + v[2])
-        +2 * v[1];
+             + (-0.96598348806398948163 * v[0])
+             + (1.96559106748102419004 * v[1]);
+      return
+        (v[0] + v[2])
+        + 2 * v[1];
     }
 };
 
@@ -167,11 +167,15 @@ typedef struct Heater
 };
 
 //Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
-Heater upperFrontHeater = {{true, 900, 1100,   0,  50}, 0, 0, relayStateOff, false, 0};
-Heater upperRearHeater  = {{false, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerFrontHeater = {{false,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerRearHeater  = {{false,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0};
+//Heater upperFrontHeater = {{true, 900, 1100,   0,  50}, 0, 0, relayStateOff, false, 0};
+//Heater upperRearHeater  = {{false, 1100, 1200,  45, 100}, 0, 0, relayStateOff, false, 0};
+//Heater lowerFrontHeater = {{false,  600,  650,  71, 100}, 0, 0, relayStateOff, false, 0};
+//Heater lowerRearHeater  = {{false,  575,  625,   0,  40}, 0, 0, relayStateOff, false, 0};
 Heater dummyHeater;
+Heater upperFrontHeater = {{true, 900, 1100,   0,  50}, 0, 0, relayStateOff, false, 0};
+Heater upperRearHeater  = {{true, 1100, 1200,  101, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{true,  600,  650,  101, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerRearHeater  = {{true,  575,  625,  101,  40}, 0, 0, relayStateOff, false, 0};
 
 // convenience array, could go into flash
 Heater *aHeaters[5] =
@@ -186,6 +190,7 @@ Heater *aHeaters[5] =
 // PID stuff
 double Setpoint = 1000;
 double Output = 47;
+PidParameters pidParameters = {0.1, 0.005, 2.0};
 //  run 2 settings PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.0140072, 0.0005294, 0, DIRECT);
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.05, 0.0008925, 0.1479627, DIRECT);
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.942, 0.17084, 0.04271, DIRECT);
@@ -200,7 +205,7 @@ double Output = 47;
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 0.8, 0.008, 1.5, DIRECT);
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.01, 4.4, DIRECT);
 //PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.1375, 0.009, 2.2, DIRECT);
-PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, 1.0, 0.0, 0.0, DIRECT);
+PID upperFrontPID(&upperFrontHeater.thermocouple, &Output, &Setpoint, pidParameters.kp, pidParameters.ki, pidParameters.kd, DIRECT);
 
 volatile bool outputTempPeriodic = false;
 
@@ -219,6 +224,7 @@ void readThermocouples(void);
 void PeriodicOutputTemps();
 bool CharValidDigit(unsigned char digit);
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
+float GetFloatInputValue(float *pValue, uint8_t *pBuf);
 void HeaterTimerInterrupt();
 void handleRelayWatchdog(void);
 void saveParametersToMemory(void);
@@ -441,21 +447,21 @@ void PeriodicOutputTemps()
 
     outputAcInputStates();
 
-    if(poStateMachine.isInState(stateStandby))
+    if (poStateMachine.isInState(stateStandby))
     {
-        Serial.println(F("State Standby"));
+      Serial.println(F("State Standby"));
     }
-    if(poStateMachine.isInState(stateTurnOnDlb))
+    if (poStateMachine.isInState(stateTurnOnDlb))
     {
-        Serial.println(F("State DLB"));
+      Serial.println(F("State DLB"));
     }
-    if(poStateMachine.isInState(stateHeatCycle))
+    if (poStateMachine.isInState(stateHeatCycle))
     {
-        Serial.println(F("State Cooking"));
+      Serial.println(F("State Cooking"));
     }
-    if(poStateMachine.isInState(stateCoolDown))
+    if (poStateMachine.isInState(stateCoolDown))
     {
-        Serial.println(F("State Cooldown"));
+      Serial.println(F("State Cooldown"));
     }
 
     Serial.print(F("Relays "));
@@ -466,7 +472,7 @@ void PeriodicOutputTemps()
     Serial.print(digitalRead(HEATER_ENABLE_LOWER_FRONT));
     Serial.print(F(" "));
     Serial.println(digitalRead(HEATER_ENABLE_LOWER_REAR));
-    
+
 #endif
 
 #ifdef USE_PID
@@ -576,6 +582,7 @@ void saveParametersToMemory(void)
   pizzaMemoryWrite((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryWrite((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
   pizzaMemoryWrite((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
+  pizzaMemoryWrite((uint8_t*)&pidParameters, offsetof(MemoryStore, pidParameters), sizeof(pidParameters));
 }
 
 void readParametersFromMemory(void)
@@ -586,6 +593,7 @@ void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryRead((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
   pizzaMemoryRead((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
+  pizzaMemoryRead((uint8_t*)&pidParameters, offsetof(MemoryStore, pidParameters), sizeof(pidParameters));
 }
 
 //------------------------------------------
@@ -650,10 +658,11 @@ void setup()
   ConvertHeaterPercentCounts();
 
   // PID
-  //  upperFrontPID.SetMode(AUTOMATIC);
   upperFrontPID.SetMode(MANUAL);
   upperFrontPID.SetOutputLimits(0, 90);
   upperFrontPID.SetSampleTime(4000);
+  upperFrontPID.SetTunings(pidParameters.kp, pidParameters.ki, pidParameters.kd);
+
 
   Serial.println(F("DEBUG Initialization comlete."));
 }
@@ -685,6 +694,21 @@ void printHeaterTemperatureParameters(char *pName, uint16_t *pParams)
 
 #define RECEVIED_COMMAND_BUFFER_LENGTH (16)
 
+/*
+   Serial commands prefixes:
+
+   f - set off percent
+   g - set pid gains
+   l - set lower temp limit
+   n - set on percent
+   p - print heater parameters
+   q - stop oven
+   s - start oven
+   t - set time base
+   v - query firmware version
+   u - set upper temp limit
+
+*/
 void handleIncomingCommands(void)
 {
   static uint8_t receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
@@ -695,9 +719,9 @@ void handleIncomingCommands(void)
   {
     lastByteReceived = Serial.read();
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
-//    Serial.print("DEBUG Char rcvd: [");
-//    Serial.print(lastByteReceived);
-//    Serial.println("]");
+    //    Serial.print("DEBUG Char rcvd: [");
+    //    Serial.print(lastByteReceived);
+    //    Serial.println("]");
     if (receivedCommandBufferIndex >= RECEVIED_COMMAND_BUFFER_LENGTH)
     {
       Serial.println(F("DEBUG command input buffer exceeded."));
@@ -885,6 +909,46 @@ void handleIncomingCommands(void)
           }
           break;
 
+        case 'g':
+          if ((lastByteReceived == 10) || (lastByteReceived == 13))
+          {
+            if (poStateMachine.isInState(stateStandby) ||
+                poStateMachine.isInState(stateCoolDown))
+            {
+              if (receivedCommandBufferIndex > 3)
+              {
+                float inputValue;
+                switch (receivedCommandBuffer[1])
+                {
+                  case 'p':
+                    GetFloatInputValue(&pidParameters.kp, &receivedCommandBuffer[2]);
+                    break;
+                  case 'i':
+                    GetFloatInputValue(&pidParameters.ki, &receivedCommandBuffer[2]);
+                    break;
+                  case 'd':
+                    GetFloatInputValue(&pidParameters.kd, &receivedCommandBuffer[2]);
+                    break;
+                  default:
+                    Serial.println(F("Unknown gain parameter."));
+                    break;
+                }
+                saveParametersToMemory();
+                upperFrontPID.SetTunings(pidParameters.kp, pidParameters.ki, pidParameters.kd);
+              }
+              else
+              {
+                Serial.println(F("DEBUG Cannot set PID gain, not enough characters"));
+              }
+            }
+            else
+            {
+              Serial.println(F("DEBUG Cannot set PID gain at this time."));
+            }
+            receivedCommandBufferIndex = 0;
+          }
+          break;
+
         case 10:
         case 13:
           // ignore cr/lf as a command
@@ -973,6 +1037,53 @@ uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf)
       Serial.print((char*)pBuf);
       inputValue = *pValue;
       break;
+    }
+    i++;
+  }
+
+  *pValue = inputValue;
+
+  return inputValue;
+}
+
+float GetFloatInputValue(float *pValue, uint8_t *pBuf)
+{
+  float inputValue = 0.0;
+  float fractionDivider = 10.0;
+  float fraction;
+  bool numberHasFraction = false;
+  uint8_t i = 0;
+
+  while (pBuf[i] != 10 && pBuf[i] != 13)
+  {
+    if (CharValidDigit(pBuf[i]))
+    {
+      if (numberHasFraction)
+      {
+        fraction = (float)(pBuf[i] - '0');
+        fraction = fraction / fractionDivider;
+        inputValue = inputValue + fraction;
+        fractionDivider = fractionDivider * 10;
+      }
+      else
+      {
+        inputValue *= 10;
+        inputValue += (float)(pBuf[i] - '0');
+      }
+    }
+    else
+    {
+      if ('.' == pBuf[i])
+      {
+        numberHasFraction = true;
+      }
+      else
+      {
+        Serial.print(F("DEBUG Invalid input, only digits expected: "));
+        Serial.print((char*)pBuf);
+        inputValue = *pValue;
+        break;
+      }
     }
     i++;
   }
