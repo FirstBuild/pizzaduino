@@ -28,6 +28,7 @@
 #include <Arduino.h>
 #include <wiring_private.h>
 #include "adcRead.h"
+#include "utility.h"
 
 #define MAX_CHANNELS 8
 
@@ -37,7 +38,8 @@ static uint8_t a2dPin = 0;
 
 enum {
   a2d_idle,
-  a2d_StartConversion,
+  a2d_SetMux,
+  a2d_InputSettleWait,
   a2d_AwaitConversionComplete
 };
 
@@ -70,6 +72,7 @@ static bool itIsTimeToStartScanning(void)
 void adcReadRun(void)
 {
   uint8_t low, high;
+  static uint32_t oldTime;
 
   switch (a2dState)
   {
@@ -77,21 +80,29 @@ void adcReadRun(void)
       if (itIsTimeToStartScanning())
       {
         a2dPin = 0;
-        a2dState = a2d_StartConversion;
+        a2dState = a2d_SetMux;
       }
       break;
 
-    case a2d_StartConversion:
+    case a2d_SetMux:
       if (pinToRead[a2dPin])
       {
         ADMUX = (DEFAULT << 6) | (a2dPin & 0x07);
-        // start the conversion
-        sbi(ADCSRA, ADSC);
-        a2dState = a2d_AwaitConversionComplete;
+        oldTime = micros();
+        a2dState = a2d_InputSettleWait;
       }
       else
       {
         a2dPin++;
+      }
+      break;
+
+    case a2d_InputSettleWait:
+      if (timeDiff(micros(), oldTime) >= 500)
+      {
+        // start the conversion
+        sbi(ADCSRA, ADSC);
+        a2dState = a2d_AwaitConversionComplete;
       }
       break;
 
@@ -102,7 +113,7 @@ void adcReadRun(void)
         high = ADCH;
         adcValue[a2dPin] = (high << 8) | low;
         a2dPin++;
-        a2dState = a2d_StartConversion;
+        a2dState = a2d_SetMux;
       }
       break;
   }

@@ -54,7 +54,8 @@ typedef struct MemoryStore
   HeaterParameters lowerRearHeaterParameters;
   uint16_t triacPeriodSeconds;
   uint16_t relayPeriodSeconds;
-  PidParameters pidParameters;
+  PidParameters upperFrontPidParameters;
+  PidParameters upperRearPidParameters;
 
 } MemoryStore;
 
