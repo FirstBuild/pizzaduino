@@ -437,6 +437,10 @@ void PeriodicOutputTemps()
     Serial.print(digitalRead(HEATER_ENABLE_LOWER_FRONT));
     Serial.print(F(" "));
     Serial.println(digitalRead(HEATER_ENABLE_LOWER_REAR));
+    Serial.print(F("PidDC "));
+    Serial.print(upperFrontPidIo.Output, 7);
+    Serial.print(F(" "));
+    Serial.println(upperRearPidIo.Output, 7);
 
 #endif
 
@@ -779,10 +783,12 @@ void handleIncomingCommands(void)
               pHeater = aHeaters[(receivedCommandBuffer[1] - '0')];
               if (receivedCommandBuffer[0] == 'l')
               {
+                Serial.println(F("DEBUG Setting lower setpoint."));
                 GetInputValue(&pHeater->parameter.tempSetPointLowOn, &receivedCommandBuffer[2]);
               }
               else
               {
+                Serial.println(F("DEBUG Setting upper setpoint."));
                 GetInputValue(&pHeater->parameter.tempSetPointHighOff, &receivedCommandBuffer[2]);
               }
               saveParametersToMemory();
@@ -808,10 +814,12 @@ void handleIncomingCommands(void)
               if (receivedCommandBuffer[0] == 'n')
               {
                 GetInputValue(&pHeater->parameter.onPercent, &receivedCommandBuffer[2]);
+                Serial.println(F("DEBUG Setting on percent."));
               }
               else
               {
                 GetInputValue(&pHeater->parameter.offPercent, &receivedCommandBuffer[2]);
+                Serial.println(F("DEBUG Setting off percent."));
               }
               ConvertHeaterPercentCounts();
               saveParametersToMemory();
@@ -1141,10 +1149,12 @@ void stateStandbyEnter()
 {
   Serial.println(F("DEBUG stateStandbyEnter"));
   digitalWrite(TEN_V_ENABLE, LOW);
+  AllHeatersOffStateClear();
 }
 
 void stateStandbyUpdate()
 {
+  AllHeatersOffStateClear();
   if (powerButtonIsOn() && pizzaOvenStartRequested)
   {
     poStateMachine.transitionTo(stateTurnOnDlb);
@@ -1299,12 +1309,12 @@ void stateCoolDownEnter()
   Serial.println(F("DEBUG stateCoolDown"));
   digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   CoolingFanControl(true);
+  AllHeatersOffStateClear();
 }
 
 void stateCoolDownUpdate()
 {
-  //    if((liveCount % 100000) == 0)
-  //      Serial.println("CU");
+  AllHeatersOffStateClear();
 
   // For now just check cool down on fan
   if ((thermocoupleFan <= COOL_DOWN_EXIT_FAN_TEMP) &&

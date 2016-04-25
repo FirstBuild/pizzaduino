@@ -51,5 +51,7 @@
 #define ANALOG_THERMO_LOWER_REAR   (A3)
 #define ANALOG_THERMO_FAN          (A4)
 
+#define UNUSED_PIN (13)
+
 #endif
 
