@@ -1175,6 +1175,8 @@ void stateStandbyUpdate()
 void stateStandbyExit()
 {
   Serial.println(F("DEBUG SX"));
+  pizzaOvenStartRequested = false;
+  pizzaOvenStopRequested = false;
 }
 
 /*
@@ -1204,6 +1206,9 @@ void stateTurnOnDlbUpdate(void)
 void stateTurnOnDlbExit(void)
 {
   Serial.println(F("DEBUG Exiting stateTurnOnDlb."));
+  pizzaOvenStartRequested = false;
+  pizzaOvenStopRequested = false;
+
 }
 
 //------------------------------------------
@@ -1296,6 +1301,8 @@ void stateHeatCycleExit()
   upperFrontPidIo.Output = 0.0;
   upperRearPID.SetMode(MANUAL);
   upperRearPidIo.Output = 0.0;
+  pizzaOvenStartRequested = false;
+  pizzaOvenStopRequested = false;
 }
 
 //------------------------------------------
@@ -1336,5 +1343,8 @@ void stateCoolDownUpdate()
 void stateCoolDownExit()
 {
   Serial.println(F("DEBUG CX"));
+  pizzaOvenStartRequested = false;
+  pizzaOvenStopRequested = false;
+
 }
 
