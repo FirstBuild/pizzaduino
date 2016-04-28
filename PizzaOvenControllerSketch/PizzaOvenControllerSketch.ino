@@ -42,7 +42,7 @@
 // Macros
 //------------------------------------------
 #define PROTOCOL_MAJOR_VERSION   0
-#define PROTOCOL_MINOR_VERSION   2003
+#define PROTOCOL_MINOR_VERSION   2004
 #define PROTOCOL_BUGFIX_VERSION  0
 
 //------------------------------------------
