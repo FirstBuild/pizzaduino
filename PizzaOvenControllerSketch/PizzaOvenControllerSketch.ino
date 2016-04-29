@@ -232,17 +232,17 @@ void readThermocouples(void)
 
 void ConvertHeaterPercentCounts()
 {
-  upperFrontHeater.heaterCountsOn  = (uint16_t)(((uint32_t)upperFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)upperFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperFrontHeater.heaterCountsOn  = (((uint32_t)upperFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperFrontHeater.heaterCountsOff = (((uint32_t)upperFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  upperRearHeater.heaterCountsOn   = (uint16_t)(((uint32_t)upperRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-  upperRearHeater.heaterCountsOff  = (uint16_t)(((uint32_t)upperRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperRearHeater.heaterCountsOn   = (((uint32_t)upperRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperRearHeater.heaterCountsOff  = (((uint32_t)upperRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  lowerFrontHeater.heaterCountsOn  = (uint16_t)(((uint32_t)lowerFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
-  lowerFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)lowerFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerFrontHeater.heaterCountsOn  = (((uint32_t)lowerFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerFrontHeater.heaterCountsOff = (((uint32_t)lowerFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 
-  lowerRearHeater.heaterCountsOn   = (uint16_t)(((uint32_t)lowerRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
-  lowerRearHeater.heaterCountsOff  = (uint16_t)(((uint32_t)lowerRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerRearHeater.heaterCountsOn   = (((uint32_t)lowerRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  lowerRearHeater.heaterCountsOff  = (((uint32_t)lowerRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 }
 
 void UpdateHeaterHardware()
@@ -355,7 +355,8 @@ void UpdateHeatControlWithPID(Heater *pHeater, uint16_t currentCounterTimer)
   pHeater->relayState = relayStateOff;
   if ((pHeater->parameter.enabled == true) &&
       (currentCounterTimer >= pHeater->heaterCountsOn) &&
-      (currentCounterTimer <= pHeater->heaterCountsOff))
+      (currentCounterTimer <= pHeater->heaterCountsOff) &&
+      (pHeater->parameter.onPercent < pHeater->parameter.offPercent))
   {
     pHeater->relayState = relayStateOn;
   }
@@ -441,6 +442,11 @@ void PeriodicOutputTemps()
     Serial.print(upperFrontPidIo.Output, 7);
     Serial.print(F(" "));
     Serial.println(upperRearPidIo.Output, 7);
+
+    Serial.print("Time: ");
+    Serial.print(relayTimeBase);
+    Serial.print(", thresh: ");
+    Serial.println(lowerRearHeater.heaterCountsOn);
 
 #endif
 
