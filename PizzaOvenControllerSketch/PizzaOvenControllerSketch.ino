@@ -276,7 +276,7 @@ void CoolingFanControl(boolean control)
 
   if (lastControl != control)
   {
-    Serial.println("DEBUG Changing the state of the cooling fan.");
+    Serial.println(F("DEBUG Changing the state of the cooling fan."));
     if (control == true)
     {
       changeRelayState(COOLING_FAN_SIGNAL, relayStateOn);
@@ -589,7 +589,6 @@ void setup()
 
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
-  printHeaterTemperatureParameters("Upper front before: ", upperFrontHeater.parameter.parameterArray);
   if (pizzaMemoryWasEmpty == pizzaMemoryInitResponse)
   {
     Serial.println(F("DEBUG Initializing empty EEPROM memory."));
@@ -600,7 +599,6 @@ void setup()
     Serial.println(F("DEBUG Reading parameters from EEPROM memory."));
     readParametersFromMemory();
   }
-  printHeaterTemperatureParameters("Upper front after: ", upperFrontHeater.parameter.parameterArray);
 
   acInputsInit();
 
