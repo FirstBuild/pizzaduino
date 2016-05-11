@@ -50,8 +50,8 @@
 //------------------------------------------
 
 // For now just check cool down on fan
-#define COOL_DOWN_EXIT_FAN_TEMP				((double)100.0)  // 100 degrees F
-#define COOL_DOWN_EXIT_HEATER_TEMP		((double)100.0)  // 150 degrees F
+#define COOL_DOWN_EXIT_FAN_TEMP				((double)350.0)  // 100 degrees F
+#define COOL_DOWN_EXIT_HEATER_TEMP		((double)350.0)  // 150 degrees F
 
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
@@ -158,6 +158,7 @@ Heater *aHeaters[5] =
 
 #ifdef USE_PID
 // PID stuff
+#define MAX_PID_OUTPUT 100
 typedef struct PidIo
 {
   double Setpoint;
@@ -638,12 +639,12 @@ void setup()
 
 #ifdef USE_PID
   upperFrontPID.SetMode(MANUAL);
-  upperFrontPID.SetOutputLimits(0, 90);
+  upperFrontPID.SetOutputLimits(0, MAX_PID_OUTPUT);
   upperFrontPID.SetSampleTime(4000);
   upperFrontPID.SetTunings(upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd);
 
   upperRearPID.SetMode(MANUAL);
-  upperRearPID.SetOutputLimits(0, 90);
+  upperRearPID.SetOutputLimits(0, MAX_PID_OUTPUT);
   upperRearPID.SetSampleTime(4000);
   upperRearPID.SetTunings(upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd);
 #endif
