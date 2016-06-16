@@ -1,9 +1,5 @@
 /*
-  ac_input.h
-  
-  Read the AC inputs
-  
-  Copyright (c) 2015 FirstBuild
+  Copyright (c) 2016 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -22,23 +18,50 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
+*/
 
- */
+#include "DigitalInputDebounced.h"
+#include <Arduino.h>
 
-#ifndef AC_INPUT_H
-#define AC_INPUT_H
+#define DEBOUNCE_COUNT 5
 
-#include <stdint.h>
+DigitalInputDebounced::DigitalInputDebounced(int pin, bool initialState, bool activeLow)
+{
+  m_activeLow = activeLow;
+  m_count = 0;
+  m_inputState = initialState;
+  m_pin = pin;
+  pinMode(pin, INPUT);
+}
 
-// Call acInputsInit in the setup function to initialize.
-void acInputsInit(void);
+void DigitalInputDebounced::UpdateInput(void)
+{
+  if (digitalRead(m_pin) == 1)
+  {
+    if (m_count < DEBOUNCE_COUNT)
+    {
+      m_count++;
+    }
+    else
+    {
+      m_inputState = m_activeLow ? false : true;
+    }
+  } 
+  else 
+  {
+    if (m_count > 0)
+    {
+      m_count--;
+    }
+    else
+    {
+      m_inputState = m_activeLow ? true : false;
+    }
+  }
+}
 
-// Call acInputsRun from the loop function.
-void acInputsRun(void);
+bool DigitalInputDebounced::IsActive(void)
+{
+  return m_inputState;  
+}
 
-// Call the get functions to get the status of the AC inputs
-bool powerButtonIsOn(void);
-bool l2DlbIsOn(void);
-bool acInput3IOn(void);
-
-#endif

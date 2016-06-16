@@ -27,13 +27,14 @@
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
 #include "acInput.h"
-#include "adcRead.h"
 #include "pinDefinitions.h"
 #include "relayBoost.h"
 #include "relayDriver.h"
 #include "pizzaMemory.h"
 #include "PID_v1.h"
 #include <limits.h>
+#include "DigitalInputDebounced.h"
+#include "adcRead.h"
 
 #define USE_PID
 //#define ENABLE_PID_TUNING
@@ -100,6 +101,9 @@ uint16_t countOutputTempPeriodic = 0;
 // Heater cycle time in multiples of 1 second
 uint16_t triacPeriodSeconds = 4;
 uint16_t relayPeriodSeconds = 60;
+uint16_t doorDeployCount = 0;
+bool doorHasDeployed = false;
+DigitalInputDebounced doorInput(DOOR_STATUS_INPUT, false, true);
 
 static bool TCsHaveBeenInitialized = false;
 
@@ -376,6 +380,14 @@ void outputAcInputStates()
   Serial.println(l2DlbIsOn());
 }
 
+void outputDoorStatus()
+{
+  Serial.print(F("Door "));
+  Serial.print(doorInput.IsActive() ? 1 : 0);
+  Serial.print(F(" Count "));
+  Serial.println(doorDeployCount);
+}
+
 void PeriodicOutputTemps()
 {
   uint8_t strLen;
@@ -413,6 +425,7 @@ void PeriodicOutputTemps()
     Serial.println(intTempCFan);
 
     outputAcInputStates();
+    outputDoorStatus();
 
     if (poStateMachine.isInState(stateStandby))
     {
@@ -562,6 +575,8 @@ void saveParametersToMemory(void)
   pizzaMemoryWrite((uint8_t*)&upperFrontPidIo.pidParameters, offsetof(MemoryStore, upperFrontPidParameters), sizeof(PidParameters));
   pizzaMemoryWrite((uint8_t*)&upperRearPidIo.pidParameters, offsetof(MemoryStore, upperRearPidParameters), sizeof(PidParameters));
 #endif
+  pizzaMemoryWrite((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
+  pizzaMemoryWrite((uint8_t*)&doorHasDeployed, offsetof(MemoryStore, doorHasDeployed), sizeof(doorHasDeployed));
 }
 
 void readParametersFromMemory(void)
@@ -576,10 +591,11 @@ void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&upperFrontPidIo.pidParameters, offsetof(MemoryStore, upperFrontPidParameters), sizeof(PidParameters));
   pizzaMemoryRead((uint8_t*)&upperRearPidIo.pidParameters, offsetof(MemoryStore, upperRearPidParameters), sizeof(PidParameters));
 #endif
+  pizzaMemoryRead((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
 }
 
 //------------------------------------------
-// Setup Routines
+// Setup Routine
 //------------------------------------------
 void setup()
 {
@@ -1024,6 +1040,19 @@ uint32_t liveCount = 0;
 uint16_t inputValue;
 uint16_t tempMultiply, tempPercent, tempTemp;
 
+void updateDcInputs(void)
+{
+  static int oldMillis = millis();
+  int newMillis = millis();
+
+  if ((newMillis - oldMillis) >= 10)
+  {
+    oldMillis = newMillis;
+
+    doorInput.UpdateInput();
+  }
+}
+
 void loop()
 {
   bool oldPowerButtonState = powerButtonIsOn();
@@ -1034,6 +1063,18 @@ void loop()
   acInputsRun();
   readThermocouples();
   handleIncomingCommands();
+  updateDcInputs();
+
+  // handle door status
+  if (doorInput.IsActive())
+  {
+    if (doorHasDeployed == false)
+    {
+      doorHasDeployed = true;
+      doorDeployCount++; 
+      saveParametersToMemory();
+    }
+  }
 
   if ((oldPowerButtonState != powerButtonIsOn()) || (oldDlbState != l2DlbIsOn()))
   {

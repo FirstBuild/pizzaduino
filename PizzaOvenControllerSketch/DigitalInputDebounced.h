@@ -1,9 +1,5 @@
 /*
-  ac_input.h
-  
-  Read the AC inputs
-  
-  Copyright (c) 2015 FirstBuild
+  Copyright (c) 2016 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -22,23 +18,23 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
+*/
 
- */
+#ifndef DIGITAL_INPUT_DEBOUNCED_H
+#define DIGITAL_INPUT_DEBOUNCED_H
 
-#ifndef AC_INPUT_H
-#define AC_INPUT_H
 
-#include <stdint.h>
+class DigitalInputDebounced {
+  public:
+  DigitalInputDebounced(int pin, bool initialState, bool activeLow);
+  void UpdateInput(void);
+  bool IsActive(void);
 
-// Call acInputsInit in the setup function to initialize.
-void acInputsInit(void);
-
-// Call acInputsRun from the loop function.
-void acInputsRun(void);
-
-// Call the get functions to get the status of the AC inputs
-bool powerButtonIsOn(void);
-bool l2DlbIsOn(void);
-bool acInput3IOn(void);
+  private:
+  bool m_inputState;
+  int m_count;
+  bool m_activeLow;
+  int m_pin;
+};
 
 #endif

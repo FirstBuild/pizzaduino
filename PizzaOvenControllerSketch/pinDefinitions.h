@@ -43,6 +43,8 @@
 #define VOLTAGE_DETECT             ( 5) //Used to determine supply voltage as 208VAC or 240VAC
 #define POWER_SWITCH_AC_INPUT      ( 3) //AC Input that indicates the state of the power switch
 #define DLB_STATUS_AC_INPUT        ( 4) //AC Intput that indicates the status of the L2 panel mount DLB relays
+#define DOOR_STATUS_INPUT          (13)
+#define AC_INPUT_3                 (A5)
 
 // Temperature inputs
 #define ANALOG_THERMO_UPPER_FRONT  (A7)
@@ -50,8 +52,6 @@
 #define ANALOG_THERMO_LOWER_FRONT  (A2)
 #define ANALOG_THERMO_LOWER_REAR   (A3)
 #define ANALOG_THERMO_FAN          (A4)
-
-#define UNUSED_PIN (13)
 
 #endif
 

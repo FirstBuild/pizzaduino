@@ -56,7 +56,8 @@ typedef struct MemoryStore
   uint16_t relayPeriodSeconds;
   PidParameters upperFrontPidParameters;
   PidParameters upperRearPidParameters;
-
+  uint16_t doorDeployCount;
+  bool doorHasDeployed;
 } MemoryStore;
 
 enum pizzaMemoryReturnTypes

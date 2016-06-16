@@ -32,8 +32,12 @@
 static uint32_t oldTime = 0;
 static bool acInputOneState = false;
 static bool acInputTwoState = false;
+static bool acInputThreeState = false;
 static volatile uint32_t acInputOneCount = 0;
 static volatile uint32_t acInputTwoCount = 0;
+
+static int acInputThreeZeroCount = 0;
+static int acInputThreeOneCount = 0;
 
 static void pciSetup(byte pin)
 {
@@ -84,5 +88,10 @@ bool powerButtonIsOn(void)
 bool l2DlbIsOn(void)
 {
   return acInputTwoState;
+}
+
+bool acInput3IOn(void)
+{
+  return acInputThreeState;
 }
 
