@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2015 FirstBuild
+  Copyright (c) 2016 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -18,39 +18,44 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
-*/
+ */
 
-#ifndef PIZZA_MEMORY_H
-#define PIZZA_MEMORY_H
+#ifndef HEATER_H_
+#define HEATER_H_
 
-#include <Arduino.h>
+#include "config.h"
 #include "projectTypeDefs.h"
-#include "heater.h"
+#include "filter.h"
 
-typedef struct MemoryStore
+struct HeaterParameters
 {
-  HeaterParameters upperFrontHeaterParameters;
-  HeaterParameters upperRearHeaterParameters;
-  HeaterParameters lowerFrontHeaterParameters;
-  HeaterParameters lowerRearHeaterParameters;
-  uint16_t triacPeriodSeconds;
-  uint16_t relayPeriodSeconds;
-  PidParameters upperFrontPidParameters;
-  PidParameters upperRearPidParameters;
-  uint16_t doorDeployCount;
-  bool doorHasDeployed;
-} MemoryStore;
-
-enum pizzaMemoryReturnTypes
-{
-  pizzamemorySuccess,
-  pizzamemoryFail,
-  pizzaMemoryWasEmpty,
-  pizzamemoryWasInitialized
+  bool enabled;
+  union {
+    struct {
+      uint16_t tempSetPointLowOn;   // In integer degrees C
+      uint16_t tempSetPointHighOff; // "      "
+      uint16_t onPercent;       // Time when a heater turns on in percent
+      uint16_t offPercent;      // Time when a heater turns off in percent
+    };
+    uint16_t parameterArray[4];
+  };
 };
 
-pizzaMemoryReturnTypes pizzaMemoryInit(void);
-pizzaMemoryReturnTypes pizzaMemoryRead(uint8_t *pBuf, uint16_t addr, uint16_t size);
-pizzaMemoryReturnTypes pizzaMemoryWrite(uint8_t *pBuf, uint16_t addr, uint16_t size);
+struct Heater
+{
+  HeaterParameters parameter;
+  uint32_t heaterCountsOn;
+  uint32_t heaterCountsOff;
+  RelayState relayState;
+  bool heaterCoolDownState;
+  double thermocouple;
+  FilterBeLp2 tcFilter;
+};
 
+
+void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer);
+#ifdef USE_PID
+void UpdateHeatControlWithPID(Heater *pHeater, uint16_t currentCounterTimer);
 #endif
+
+#endif /* HEATER_H_ */

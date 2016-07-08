@@ -1,5 +1,5 @@
 /*
-  Copyright (c) 2015 FirstBuild
+  Copyright (c) 2016 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -18,39 +18,35 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
-*/
+ */
 
-#ifndef PIZZA_MEMORY_H
-#define PIZZA_MEMORY_H
+#ifndef FILTER_H_
+#define FILTER_H_
 
-#include <Arduino.h>
-#include "projectTypeDefs.h"
-#include "heater.h"
-
-typedef struct MemoryStore
+// From: http://www.schwietering.com/jayduino/filtuino/
+//Low pass bessel filter order=2 alpha1=0.0025, 0.125  hz corner freq
+class  FilterBeLp2
 {
-  HeaterParameters upperFrontHeaterParameters;
-  HeaterParameters upperRearHeaterParameters;
-  HeaterParameters lowerFrontHeaterParameters;
-  HeaterParameters lowerRearHeaterParameters;
-  uint16_t triacPeriodSeconds;
-  uint16_t relayPeriodSeconds;
-  PidParameters upperFrontPidParameters;
-  PidParameters upperRearPidParameters;
-  uint16_t doorDeployCount;
-  bool doorHasDeployed;
-} MemoryStore;
-
-enum pizzaMemoryReturnTypes
-{
-  pizzamemorySuccess,
-  pizzamemoryFail,
-  pizzaMemoryWasEmpty,
-  pizzamemoryWasInitialized
+  public:
+    FilterBeLp2()
+    {
+      v[0] = 0.0;
+      v[1] = 0.0;
+    }
+  private:
+    float v[3];
+  public:
+    float step(float x) //class II
+    {
+      v[0] = v[1];
+      v[1] = v[2];
+      v[2] = (9.810514574132291022e-5 * x)
+             + (-0.96598348806398948163 * v[0])
+             + (1.96559106748102419004 * v[1]);
+      return
+        (v[0] + v[2])
+        + 2 * v[1];
+    }
 };
 
-pizzaMemoryReturnTypes pizzaMemoryInit(void);
-pizzaMemoryReturnTypes pizzaMemoryRead(uint8_t *pBuf, uint16_t addr, uint16_t size);
-pizzaMemoryReturnTypes pizzaMemoryWrite(uint8_t *pBuf, uint16_t addr, uint16_t size);
-
-#endif
+#endif /* FILTER_H_ */

@@ -26,5 +26,9 @@
 #include <stdint.h>
 
 uint32_t timeDiff(uint32_t newTime, uint32_t oldTime);
+bool CharIsADigit(unsigned char digit);
+void printHeaterTemperatureParameters(const char *pName, uint16_t *pParams);
+uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
+float GetFloatInputValue(float *pValue, uint8_t *pBuf);
 
 #endif

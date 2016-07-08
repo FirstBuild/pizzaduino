@@ -43,6 +43,13 @@ static uint8_t lastRelay = 0;
 
 #define RELAY_OPERATION_DELAY_MS 211
 
+void initializeRelayPin(uint8_t pin)
+{
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, LOW);
+  relayDriverInit(pin, relayStateOff);
+}
+
 static uint8_t getIndexOfRelay(uint8_t pin)
 {
   uint8_t index = 0;

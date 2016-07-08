@@ -1,5 +1,9 @@
 /*
-  Copyright (c) 2015 FirstBuild
+  coolingFan.h
+
+  Cooling fan pin control
+
+  Copyright (c) 2016 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -18,39 +22,13 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
-*/
 
-#ifndef PIZZA_MEMORY_H
-#define PIZZA_MEMORY_H
 
-#include <Arduino.h>
-#include "projectTypeDefs.h"
-#include "heater.h"
+ */
 
-typedef struct MemoryStore
-{
-  HeaterParameters upperFrontHeaterParameters;
-  HeaterParameters upperRearHeaterParameters;
-  HeaterParameters lowerFrontHeaterParameters;
-  HeaterParameters lowerRearHeaterParameters;
-  uint16_t triacPeriodSeconds;
-  uint16_t relayPeriodSeconds;
-  PidParameters upperFrontPidParameters;
-  PidParameters upperRearPidParameters;
-  uint16_t doorDeployCount;
-  bool doorHasDeployed;
-} MemoryStore;
+#ifndef COOLINGFAN_H_
+#define COOLINGFAN_H_
 
-enum pizzaMemoryReturnTypes
-{
-  pizzamemorySuccess,
-  pizzamemoryFail,
-  pizzaMemoryWasEmpty,
-  pizzamemoryWasInitialized
-};
+void CoolingFanControl(boolean control);
 
-pizzaMemoryReturnTypes pizzaMemoryInit(void);
-pizzaMemoryReturnTypes pizzaMemoryRead(uint8_t *pBuf, uint16_t addr, uint16_t size);
-pizzaMemoryReturnTypes pizzaMemoryWrite(uint8_t *pBuf, uint16_t addr, uint16_t size);
-
-#endif
+#endif /* COOLINGFAN_H_ */

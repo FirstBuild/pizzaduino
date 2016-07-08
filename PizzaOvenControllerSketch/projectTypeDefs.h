@@ -1,5 +1,7 @@
 /*
-  Copyright (c) 2015 FirstBuild
+  pizzaTypes.h
+
+  Copyright (c) 2016 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
@@ -18,39 +20,26 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
-*/
+ */
 
-#ifndef PIZZA_MEMORY_H
-#define PIZZA_MEMORY_H
+#ifndef PROJECTTYPEDEFS_H_
+#define PROJECTTYPEDEFS_H_
 
-#include <Arduino.h>
-#include "projectTypeDefs.h"
-#include "heater.h"
+#include <stdint.h>
+#include "relayDriver.h"
 
-typedef struct MemoryStore
+struct PidParameters
 {
-  HeaterParameters upperFrontHeaterParameters;
-  HeaterParameters upperRearHeaterParameters;
-  HeaterParameters lowerFrontHeaterParameters;
-  HeaterParameters lowerRearHeaterParameters;
-  uint16_t triacPeriodSeconds;
-  uint16_t relayPeriodSeconds;
-  PidParameters upperFrontPidParameters;
-  PidParameters upperRearPidParameters;
-  uint16_t doorDeployCount;
-  bool doorHasDeployed;
-} MemoryStore;
-
-enum pizzaMemoryReturnTypes
-{
-  pizzamemorySuccess,
-  pizzamemoryFail,
-  pizzaMemoryWasEmpty,
-  pizzamemoryWasInitialized
+  float kp;
+  float ki;
+  float kd;
 };
 
-pizzaMemoryReturnTypes pizzaMemoryInit(void);
-pizzaMemoryReturnTypes pizzaMemoryRead(uint8_t *pBuf, uint16_t addr, uint16_t size);
-pizzaMemoryReturnTypes pizzaMemoryWrite(uint8_t *pBuf, uint16_t addr, uint16_t size);
+struct PidIo
+{
+  double Setpoint;
+  double Output;
+  PidParameters pidParameters;
+};
 
-#endif
+#endif /* PROJECTTYPEDEFS_H_ */

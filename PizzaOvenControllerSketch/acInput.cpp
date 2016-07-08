@@ -24,6 +24,20 @@
   THE SOFTWARE.
 */
 
+/*
+ * Port pin interrupt stuff
+ * PD3 - PCINT19 - Pin change interrupt 19 - Using INT1
+ * PD4 - PCINT20 - Pin change interrupt 20 - Using PCINT2
+ * PC5 - PCINT13 - Pin change interrupt 13 - Using PCINT1
+*/
+
+/*
+ * Pin definitions
+ * AC Input 1 - PD4 - Arduino pin 4
+ * AC Input 2 - PD3 - Arduino pin 3
+ * AC Input 3 - PC5 - Arduino pin A5/19
+ */
+
 #include "acInput.h"
 #include <Arduino.h>
 #include <avr/io.h>
@@ -35,9 +49,7 @@ static bool acInputTwoState = false;
 static bool acInputThreeState = false;
 static volatile uint32_t acInputOneCount = 0;
 static volatile uint32_t acInputTwoCount = 0;
-
-static int acInputThreeZeroCount = 0;
-static int acInputThreeOneCount = 0;
+static volatile uint32_t acInputThreeCount = 0;
 
 static void pciSetup(byte pin)
 {
@@ -51,6 +63,11 @@ ISR (PCINT2_vect)
   acInputOneCount++;
 }
 
+ISR (PCINT1_vect)
+{
+  acInputThreeCount++;
+}
+
 void myINT1_vect(void)
 {
   acInputTwoCount++;
@@ -62,6 +79,8 @@ void acInputsInit(void)
   pciSetup(4);
   // Arduino pin 3 is tied to 328P port pin PD3, use the INT1 interrupt for input
   attachInterrupt(digitalPinToInterrupt(3), myINT1_vect, CHANGE);
+  // Arduino pin 4 is tied to 328P port pin PD4, use the pin change interrupt for input
+  pciSetup(A5);
 }
 
 void acInputsRun(void)
@@ -74,8 +93,10 @@ void acInputsRun(void)
     noInterrupts();
     acInputOneState = acInputOneCount > 5;
     acInputTwoState = acInputTwoCount > 5;
+    acInputThreeState = acInputThreeCount > 5;
     acInputOneCount = 0;
     acInputTwoCount = 0;
+    acInputThreeCount = 0;
     interrupts();
   }
 }
@@ -90,7 +111,7 @@ bool l2DlbIsOn(void)
   return acInputTwoState;
 }
 
-bool acInput3IOn(void)
+bool TcoInputIsOn(void)
 {
   return acInputThreeState;
 }
