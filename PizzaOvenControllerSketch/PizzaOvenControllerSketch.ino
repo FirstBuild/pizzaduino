@@ -1032,9 +1032,6 @@ void handleIncomingCommands(void)
   }
 }
 
-//------------------------------------------
-// Main Loop
-//------------------------------------------
 byte queryDone = false;
 uint32_t liveCount = 0;
 uint16_t inputValue;
@@ -1053,6 +1050,9 @@ void updateDcInputs(void)
   }
 }
 
+//------------------------------------------
+// Main Loop
+//------------------------------------------
 void loop()
 {
   bool oldPowerButtonState = powerButtonIsOn();
