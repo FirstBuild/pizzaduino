@@ -265,7 +265,9 @@ void outputAcInputStates()
   Serial.print(F("Power "));
   Serial.print(powerButtonIsOn());
   Serial.print(F(" L2DLB "));
-  Serial.println(l2DlbIsOn());
+  Serial.print(l2DlbIsOn());
+  Serial.print(F(" TCO "));
+  Serial.println(TcoInputIsOn());
 }
 
 void outputDoorStatus()
