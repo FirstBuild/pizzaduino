@@ -508,6 +508,7 @@ void setup()
 
   // Setup Cooling Fan as Output and Turn Off
   initializeRelayPin(COOLING_FAN_RELAY);
+  initializeRelayPin(COOLING_FAN_HIGH_SPEED);
 
   // Setup Heater Enables as Outputs and Turn Off
   initializeRelayPin(HEATER_TRIAC_UPPER_FRONT);
@@ -519,8 +520,6 @@ void setup()
   initializeRelayPin(HEATER_UPPER_FRONT_DLB);
   initializeRelayPin(HEATER_UPPER_REAR_DLB);
 
-  pinMode(TEN_V_ENABLE, OUTPUT);
-  digitalWrite(TEN_V_ENABLE, LOW);
   pinMode(BOOST_ENABLE, OUTPUT);
   digitalWrite(BOOST_ENABLE, LOW);
   pinMode(RELAY_WATCHDOG, OUTPUT);
@@ -546,7 +545,7 @@ void setup()
   upperRearPID.SetTunings(upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd);
 #endif
 
-  Serial.println(F("DEBUG Initialization comlete."));
+  Serial.println(F("DEBUG Initialization complete."));
 }
 
 #define RECEVIED_COMMAND_BUFFER_LENGTH (16)
@@ -963,7 +962,6 @@ void loop()
 void stateStandbyEnter()
 {
   Serial.println(F("DEBUG stateStandbyEnter"));
-  digitalWrite(TEN_V_ENABLE, LOW);
   AllHeatersOffStateClear();
 }
 
@@ -1001,7 +999,6 @@ void stateStandbyExit()
 void stateTurnOnDlbEnter(void)
 {
   Serial.println(F("DEBUG Entering stateTurnOnDlb."));
-  digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   CoolingFanControl(true);
 }
 
@@ -1129,7 +1126,6 @@ void stateHeatCycleExit()
 void stateCoolDownEnter()
 {
   Serial.println(F("DEBUG stateCoolDown"));
-  digitalWrite(TEN_V_ENABLE, HIGH);  //Turn on 10V supply
   CoolingFanControl(true);
   AllHeatersOffStateClear();
 }

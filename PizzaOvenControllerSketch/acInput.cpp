@@ -26,16 +26,16 @@
 
 /*
  * Port pin interrupt stuff
- * PD3 - PCINT19 - Pin change interrupt 19 - Using INT1
  * PD4 - PCINT20 - Pin change interrupt 20 - Using PCINT2
+ * PD3 - PCINT19 - Pin change interrupt 19 - Using INT1
  * PC5 - PCINT13 - Pin change interrupt 13 - Using PCINT1
 */
 
 /*
  * Pin definitions
- * AC Input 1 - PD4 - Arduino pin 4
- * AC Input 2 - PD3 - Arduino pin 3
- * AC Input 3 - PC5 - Arduino pin A5/19
+ * AC Input 1 - PD4 - Arduino pin D4
+ * AC Input 2 - PD3 - Arduino pin D3
+ * AC Input 3 - PC5 - Arduino pin A5
  */
 
 #include "acInput.h"
@@ -75,11 +75,12 @@ void myINT1_vect(void)
 
 void acInputsInit(void)
 {
+  pinMode(A5, INPUT);
   // Arduino pin 4 is tied to 328P port pin PD4, use the pin change interrupt for input
   pciSetup(4);
   // Arduino pin 3 is tied to 328P port pin PD3, use the INT1 interrupt for input
   attachInterrupt(digitalPinToInterrupt(3), myINT1_vect, CHANGE);
-  // Arduino pin 4 is tied to 328P port pin PD4, use the pin change interrupt for input
+  // Arduino pin A5 is tied to 328P port pin PC5, use the pin change interrupt for input
   pciSetup(A5);
 }
 

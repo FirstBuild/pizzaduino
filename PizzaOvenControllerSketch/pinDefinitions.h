@@ -27,6 +27,7 @@
 
 // Pin Definitions
 #define COOLING_FAN_RELAY         (12) // cooling fan relay
+#define COOLING_FAN_HIGH_SPEED    ( 2) // cooling fan high speed relay PD2
 
 #define HEATER_UPPER_FRONT_DLB     ( 8) //Relay that provides L1 to the triac, must be ON for heat
 #define HEATER_UPPER_REAR_DLB      ( 9) //Relay that provides L1 to the triac, must be ON for heat
@@ -37,7 +38,6 @@
 #define HEATER_RELAY_LOWER_FRONT  (10) // relay output
 #define HEATER_RELAY_LOWER_REAR   (11) // relay output
 
-#define TEN_V_ENABLE               ( 2) //Enable signal to turn on the 10V power supply that is the hold voltage for relays
 #define BOOST_ENABLE               ( 7) //Enable 15V pull in voltage for relays
 #define RELAY_WATCHDOG             ( 6) //Signal must toggle at a rate of X Hz in order to enable relays
 #define VOLTAGE_DETECT             ( 5) //Used to determine supply voltage as 208VAC or 240VAC
