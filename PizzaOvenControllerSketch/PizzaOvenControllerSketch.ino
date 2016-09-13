@@ -33,6 +33,7 @@
 #include "pizzaMemory.h"
 #include "PID_v1.h"
 #include <limits.h>
+#include <stdint.h>
 #include "DigitalInputDebounced.h"
 #include "adcRead.h"
 #include "projectTypeDefs.h"
@@ -41,6 +42,10 @@
 #include "utility.h"
 #include "config.h"
 #include "heater.h"
+
+#ifndef UINT32_MAX
+#define UINT32_MAX (0xffffffff)
+#endif
 
 //------------------------------------------
 // Macros
