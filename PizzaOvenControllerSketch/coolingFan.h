@@ -29,6 +29,13 @@
 #ifndef COOLINGFAN_H_
 #define COOLINGFAN_H_
 
-void CoolingFanControl(boolean control);
+typedef enum {
+  coolingFanOff,
+  coolingFanLow,
+  coolingFanHigh,
+  coolingFanInvalid=255
+} CoolingFanSpeed;
+
+void CoolingFanControl(CoolingFanSpeed control);
 
 #endif /* COOLINGFAN_H_ */

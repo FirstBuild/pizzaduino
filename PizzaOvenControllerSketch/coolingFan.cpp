@@ -29,22 +29,27 @@
 #include "pinDefinitions.h"
 #include "relayDriver.h"
 
-void CoolingFanControl(boolean control)
+void CoolingFanControl(CoolingFanSpeed speed)
 {
-  static bool lastControl = !control;
+  static CoolingFanSpeed lastSpeed = coolingFanInvalid;
 
-  if (lastControl != control)
+  if (lastSpeed != speed)
   {
+    switch(speed) {
     Serial.println(F("DEBUG Changing the state of the cooling fan."));
-    if (control == true)
-    {
-      changeRelayState(COOLING_FAN_RELAY, relayStateOn);
+      case coolingFanOff:
+        changeRelayState(COOLING_FAN_RELAY, relayStateOff);
+        changeRelayState(COOLING_FAN_HIGH_SPEED, relayStateOff);
+        break;
+      case coolingFanLow:
+        changeRelayState(COOLING_FAN_HIGH_SPEED, relayStateOff);
+        changeRelayState(COOLING_FAN_RELAY, relayStateOn);
+        break;
+      case coolingFanHigh:
+        changeRelayState(COOLING_FAN_RELAY, relayStateOn);
+        changeRelayState(COOLING_FAN_HIGH_SPEED, relayStateOn);
+      break;
     }
-    else
-    {
-      changeRelayState(COOLING_FAN_RELAY, relayStateOff);
-    }
-    lastControl = control;
   }
 }
 

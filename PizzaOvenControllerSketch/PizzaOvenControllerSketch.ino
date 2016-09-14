@@ -1004,7 +1004,7 @@ void stateStandbyExit()
 void stateTurnOnDlbEnter(void)
 {
   Serial.println(F("DEBUG Entering stateTurnOnDlb."));
-  CoolingFanControl(true);
+  CoolingFanControl(coolingFanHigh);
 }
 
 void stateTurnOnDlbUpdate(void)
@@ -1131,7 +1131,7 @@ void stateHeatCycleExit()
 void stateCoolDownEnter()
 {
   Serial.println(F("DEBUG stateCoolDown"));
-  CoolingFanControl(true);
+  CoolingFanControl(coolingFanLow);
   AllHeatersOffStateClear();
 }
 
@@ -1146,7 +1146,7 @@ void stateCoolDownUpdate()
       (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
       (lowerRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP))
   {
-    CoolingFanControl(false);
+    CoolingFanControl(coolingFanOff);
     poStateMachine.transitionTo(stateStandby);
   }
   else if (powerButtonIsOn() && pizzaOvenStartRequested)
