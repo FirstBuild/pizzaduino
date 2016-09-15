@@ -20,12 +20,27 @@
   THE SOFTWARE.
  */
 
-#ifndef CONFIG_H_
-#define CONFIG_H_
+#ifndef COOKING_STATE_MACHINE_H
+#define COOKING_STATE_MACHINE_H
 
-#define USE_PID
-//#define ENABLE_PID_TUNING
+typedef enum {
+  cookingStandby,
+  cookingWaitForTco,
+  cookingWaitForSailSwitch,
+  cookingCooking,
+  cookingCooldown,
+  cookingInvald = 255
+} cookingState;
 
-#define COOL_DOWN_EXIT_HEATER_TEMP    ((double)350.0)  // 150 degrees F
 
-#endif /* CONFIG_H_ */
+void initCookingStateMachine(void);
+void updateCookingStateMachine(void);
+cookingState getCookingState(void);
+void requestPizzaOvenStart(void);
+void requestPizzaOvenStop(void);
+
+bool coollingFanFailed(void);
+bool tcoFailed(void);
+
+#endif // COOKING_STATE_MACHINE_H
+ 

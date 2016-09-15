@@ -27,7 +27,7 @@
 
 // Pin Definitions
 #define COOLING_FAN_RELAY         (12) // cooling fan relay
-#define COOLING_FAN_HIGH_SPEED    ( 2) // cooling fan high speed relay PD2
+#define COOLING_FAN_LOW_SPEED     ( 2) // cooling fan low speed relay PD2
 
 #define HEATER_UPPER_FRONT_DLB     ( 8) //Relay that provides L1 to the triac, must be ON for heat
 #define HEATER_UPPER_REAR_DLB      ( 9) //Relay that provides L1 to the triac, must be ON for heat
@@ -38,8 +38,11 @@
 #define HEATER_RELAY_LOWER_FRONT  (10) // relay output
 #define HEATER_RELAY_LOWER_REAR   (11) // relay output
 
+// Other outputs
 #define BOOST_ENABLE               ( 7) //Enable 15V pull in voltage for relays
 #define RELAY_WATCHDOG             ( 6) //Signal must toggle at a rate of X Hz in order to enable relays
+
+// Digital inputs
 #define VOLTAGE_DETECT             ( 5) //Used to determine supply voltage as 208VAC or 240VAC
 #define POWER_SWITCH_AC_INPUT      ( 3) //AC Input that indicates the state of the power switch
 #define DLB_STATUS_AC_INPUT        ( 4) //AC Input that indicates the status of the L2 panel mount DLB relays
@@ -51,7 +54,6 @@
 #define ANALOG_THERMO_UPPER_REAR   (A6)
 #define ANALOG_THERMO_LOWER_FRONT  (A2)
 #define ANALOG_THERMO_LOWER_REAR   (A3)
-#define ANALOG_THERMO_FAN          (A4)
 
 #endif
 

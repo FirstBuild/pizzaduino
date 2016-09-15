@@ -22,7 +22,7 @@
 
 // Pizza Oven Project
 
-#include "FiniteStateMachine.h"
+//#include "FiniteStateMachine.h"
 #include "TimerOne.h"
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
@@ -42,6 +42,7 @@
 #include "utility.h"
 #include "config.h"
 #include "heater.h"
+#include "cookingStateMachine.h"
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffff)
@@ -58,43 +59,12 @@
 // Macros for Constants and Pin Definitions
 //------------------------------------------
 
-// For now just check cool down on fan
-#define COOL_DOWN_EXIT_FAN_TEMP				((double)350.0)  // 100 degrees F
-#define COOL_DOWN_EXIT_HEATER_TEMP		((double)350.0)  // 150 degrees F
 
 // Timer1 Used to keep track of heat control cycles
 #define TIMER1_PERIOD_MICRO_SEC			(1000) 	// timer1 1 mSec interval 
 #define TIMER1_PERIOD_CLOCK_FACTOR	(1) 		// Clock multiplier for Timer1
 #define MILLISECONDS_PER_SECOND		  (1000)  // Count down for a period of 1 second
 #define TIMER1_OUTPUT_TEMP_PERIODIC (1000)  // Multiple of TIMER1_PERIOD_MICRO_SEC to output periodic temp
-
-//------------------------------------------
-//state machine setup
-//------------------------------------------
-void stateStandbyEnter();
-void stateStandbyUpdate();
-void stateStandbyExit();
-State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
-
-void stateTurnOnDlbEnter();
-void stateTurnOnDlbUpdate();
-void stateTurnOnDlbExit();
-State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
-
-void stateHeatCycleEnter();
-void stateHeatCycleUpdate();
-void stateHeatCycleExit();
-State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
-
-void stateCoolDownEnter();
-void stateCoolDownUpdate();
-void stateCoolDownExit();
-State stateCoolDown = State(stateCoolDownEnter, stateCoolDownUpdate, stateCoolDownExit);
-
-FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
-
-bool pizzaOvenStartRequested = false;
-bool pizzaOvenStopRequested = false;
 
 //------------------------------------------
 // Global Definitions
@@ -119,7 +89,6 @@ Heater upperFrontHeater = {{true, 1200, 1300,   0,  90}, 0, 0, relayStateOff, fa
 Heater upperRearHeater  = {{true, 1100, 1200,  10, 100}, 0, 0, relayStateOff, false, 0};
 Heater lowerFrontHeater = {{true,  600,  650,  51, 100}, 0, 0, relayStateOff, false, 0};
 Heater lowerRearHeater  = {{true,  575,  625,   0,  49}, 0, 0, relayStateOff, false, 0};
-Heater dummyHeater;
 
 // convenience array, could go into flash
 Heater *aHeaters[4] =
@@ -143,16 +112,11 @@ PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRe
 
 volatile bool outputTempPeriodic = false;
 
-double thermocoupleFan = 0.0;
 
 //------------------------------------------
 // Prototypes
 //------------------------------------------
 void ConvertHeaterPercentCounts();
-void UpdateHeaterHardware();
-void AllHeatersOffStateClear();
-//double AnalogThermocoupleTemp(uint16_t rawA2D);
-double InputThermocoupleFan();
 void readThermocouples(void);
 void PeriodicOutputTemps();
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
@@ -188,7 +152,6 @@ void readThermocouples(void)
   upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
   lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
   lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
-  thermocoupleFan = InputThermocoupleFan();
   TCsHaveBeenInitialized = true;
 }
 
@@ -218,6 +181,7 @@ void UpdateHeaterHardware()
   changeRelayState(HEATER_RELAY_LOWER_FRONT, lowerFrontHeater.relayState);
   changeRelayState(HEATER_RELAY_LOWER_REAR, lowerRearHeater.relayState);
 }
+
 void AllHeatersOffStateClear()
 {
 	uint8_t i;
@@ -228,51 +192,20 @@ void AllHeatersOffStateClear()
 		aHeaters[i]->heaterCoolDownState = false;
 	}
 
-//  upperFrontHeater.relayState = relayStateOff;
-//  upperRearHeater.relayState  = relayStateOff;
-//  lowerFrontHeater.relayState = relayStateOff;
-//  lowerRearHeater.relayState  = relayStateOff;
-//
-//  upperFrontHeater.heaterCoolDownState = false;
-//  upperRearHeater.heaterCoolDownState  = false;
-//  lowerFrontHeater.heaterCoolDownState = false;
-//  lowerRearHeater.heaterCoolDownState  = false;
-
   UpdateHeaterHardware();
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOff);
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOff);
 }
 
-//double AnalogThermocoupleTemp(uint16_t rawA2D)
-//{
-//  double analogVoltage;
-//  double tempC;
-//
-//  analogVoltage = (double)rawA2D * ANALOG_REFERENCE_VOLTAGE / 1023.0;
-//  tempC = (analogVoltage - 1.25)  / 0.005;
-//  return tempC;
-//}
-
-double InputThermocoupleFan()
-{
-  double tempC;
-
-  //	tempC = AnalogThermocoupleTemp(analogRead(ANALOG_THERMO_FAN));
-
-  tempC = 0;//AD8495KTCInterpolate(AnalogTCVolts(analogRead(ANALOG_THERMO_FAN)));
-  return tempC;
-}
-
-
 void outputAcInputStates()
 {
   Serial.print(F("Power "));
   Serial.print(powerButtonIsOn());
   Serial.print(F(" L2DLB "));
-  Serial.print(l2DlbIsOn());
+  Serial.print(sailSwitchIsOn());
   Serial.print(F(" TCO "));
-  Serial.println(TcoInputIsOn());
+  Serial.println(tcoInputIsOn());
 }
 
 void outputDoorStatus()
@@ -285,7 +218,7 @@ void outputDoorStatus()
 
 void PeriodicOutputTemps()
 {
-  uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR, intTempCFan;
+  uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
 
   // Output Periodic Temperatures
   if (true == outputTempPeriodic)
@@ -296,8 +229,6 @@ void PeriodicOutputTemps()
     intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
     intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
     intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
-    //    intTempCFan = (uint16_t) (thermocoupleFan		+ 0.5);
-    intTempCFan = getA2DReadingForPin(ANALOG_THERMO_FAN);
 
 #ifndef ENABLE_PID_TUNING
     Serial.print(F("Temps "));
@@ -307,28 +238,28 @@ void PeriodicOutputTemps()
     Serial.print(F(" "));
     Serial.print(intTempCLF);
     Serial.print(F(" "));
-    Serial.print(intTempCLR);
-    Serial.print(F(" "));
-    Serial.println(intTempCFan);
+    Serial.println(intTempCLR);
 
     outputAcInputStates();
     outputDoorStatus();
 
-    if (poStateMachine.isInState(stateStandby))
+    switch (getCookingState())
     {
-      Serial.println(F("State Standby"));
-    }
-    if (poStateMachine.isInState(stateTurnOnDlb))
-    {
-      Serial.println(F("State DLB"));
-    }
-    if (poStateMachine.isInState(stateHeatCycle))
-    {
-      Serial.println(F("State Cooking"));
-    }
-    if (poStateMachine.isInState(stateCoolDown))
-    {
-      Serial.println(F("State Cooldown"));
+      case cookingStandby:
+        Serial.println(F("State Standby"));
+        break;
+      case cookingWaitForTco:
+        Serial.println(F("State TCO"));
+        break;
+      case cookingWaitForSailSwitch:
+        Serial.println(F("State Sail Switch"));
+        break;
+      case cookingCooking:
+        Serial.println(F("State Cooking"));
+        break;
+      case cookingCooldown:
+        Serial.println(F("State Cooldown"));
+        break;
     }
 
     Serial.print(F("Relays "));
@@ -486,6 +417,23 @@ void readParametersFromMemory(void)
 void setup()
 {
   pizzaMemoryReturnTypes pizzaMemoryInitResponse;
+  uint8_t i;
+  uint8_t relaysToInitialize[] = {
+    COOLING_FAN_RELAY,
+    COOLING_FAN_LOW_SPEED,
+    HEATER_TRIAC_UPPER_FRONT,
+    HEATER_TRIAC_UPPER_REAR,
+    HEATER_RELAY_LOWER_FRONT,
+    HEATER_RELAY_LOWER_REAR,
+    HEATER_UPPER_FRONT_DLB,
+    HEATER_UPPER_REAR_DLB
+  };
+  uint8_t adcsToInitialize[] = {
+    ANALOG_THERMO_UPPER_FRONT,
+    ANALOG_THERMO_UPPER_REAR,
+    ANALOG_THERMO_LOWER_FRONT,
+    ANALOG_THERMO_LOWER_REAR
+  };
 
   Serial.begin(19200);
   Serial.println(F("DEBUG Starting pizza oven..."));
@@ -511,30 +459,21 @@ void setup()
   Timer1.disablePwm(10);
   Timer1.attachInterrupt(HeaterTimerInterrupt);
 
-  // Setup Cooling Fan as Output and Turn Off
-  initializeRelayPin(COOLING_FAN_RELAY);
-  initializeRelayPin(COOLING_FAN_HIGH_SPEED);
-
-  // Setup Heater Enables as Outputs and Turn Off
-  initializeRelayPin(HEATER_TRIAC_UPPER_FRONT);
-  initializeRelayPin(HEATER_TRIAC_UPPER_REAR);
-  initializeRelayPin(HEATER_RELAY_LOWER_FRONT);
-  initializeRelayPin(HEATER_RELAY_LOWER_REAR);
-
-  // Setup triac DLB relays
-  initializeRelayPin(HEATER_UPPER_FRONT_DLB);
-  initializeRelayPin(HEATER_UPPER_REAR_DLB);
+  // init relays
+  for (i=0; i<sizeof(relaysToInitialize)/sizeof(uint8_t); i++)
+  {
+    initializeRelayPin(relaysToInitialize[i]);
+  }
 
   pinMode(BOOST_ENABLE, OUTPUT);
   digitalWrite(BOOST_ENABLE, LOW);
   pinMode(RELAY_WATCHDOG, OUTPUT);
 
   // Initialize the A2D engine
-  adcReadInit(ANALOG_THERMO_UPPER_FRONT);
-  adcReadInit(ANALOG_THERMO_UPPER_REAR);
-  adcReadInit(ANALOG_THERMO_LOWER_FRONT);
-  adcReadInit(ANALOG_THERMO_LOWER_REAR);
-  adcReadInit(ANALOG_THERMO_FAN);
+  for (i=0; i<sizeof(adcsToInitialize)/sizeof(uint8_t); i++)
+  {
+    adcReadInit(adcsToInitialize[i]);
+  }
 
   ConvertHeaterPercentCounts();
 
@@ -596,13 +535,15 @@ void handleIncomingCommands(void)
       switch (receivedCommandBuffer[0])
       {
         case 's':  // Start Pizza Oven Cycle
-          pizzaOvenStartRequested = true;
+          //pizzaOvenStartRequested = true;
+          requestPizzaOvenStart();
           receivedCommandBufferIndex = 0;
           Serial.println(F("DEBUG Pizza oven start requested."));
           break;
 
         case 'q': // Quit Pizza Oven Cycle
-          pizzaOvenStopRequested = true;
+          //pizzaOvenStopRequested = true;
+          requestPizzaOvenStop();
           receivedCommandBufferIndex = 0;
           upperFrontPID.SetMode(MANUAL);
           Serial.println(F("DEBUG Pizza oven stop requested."));
@@ -717,8 +658,11 @@ void handleIncomingCommands(void)
           // wait for CR or LF
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
-            if (poStateMachine.isInState(stateStandby) ||
-                poStateMachine.isInState(stateCoolDown))
+//            if (poStateMachine.isInState(stateStandby) ||
+//                poStateMachine.isInState(stateCoolDown))
+//            {
+            if ((cookingStandby == getCookingState()) ||
+                cookingCooldown == getCookingState())
             {
               if (receivedCommandBufferIndex > 3)
               {
@@ -778,8 +722,11 @@ void handleIncomingCommands(void)
         case 'g':
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
-            if (poStateMachine.isInState(stateStandby) ||
-                poStateMachine.isInState(stateCoolDown))
+//            if (poStateMachine.isInState(stateStandby) ||
+//                poStateMachine.isInState(stateCoolDown))
+//            {
+            if ((cookingStandby == getCookingState()) ||
+                cookingCooldown == getCookingState())
             {
               if (receivedCommandBufferIndex > 4)
               {
@@ -913,7 +860,7 @@ void updateDcInputs(void)
 void loop()
 {
   bool oldPowerButtonState = powerButtonIsOn();
-  bool oldDlbState = l2DlbIsOn();
+  bool oldDlbState = sailSwitchIsOn();
 
   // Gather inputs and process
   adcReadRun();
@@ -933,12 +880,13 @@ void loop()
     }
   }
 
-  if ((oldPowerButtonState != powerButtonIsOn()) || (oldDlbState != l2DlbIsOn()))
+  if ((oldPowerButtonState != powerButtonIsOn()) || (oldDlbState != sailSwitchIsOn()))
   {
     outputAcInputStates();
   }
 
-  poStateMachine.update();
+//poStateMachine.update();
+  updateCookingStateMachine();
 
   boostEnable(relayBoostRun);
   relayDriverRun();
@@ -956,211 +904,5 @@ void loop()
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
   upperRearHeater.heaterCountsOn = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
 #endif
-}
-
-
-//------------------------------------------
-//state machine stateStandby
-//------------------------------------------
-//State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
-
-void stateStandbyEnter()
-{
-  Serial.println(F("DEBUG stateStandbyEnter"));
-  AllHeatersOffStateClear();
-}
-
-void stateStandbyUpdate()
-{
-  AllHeatersOffStateClear();
-  if (powerButtonIsOn() && pizzaOvenStartRequested)
-  {
-    poStateMachine.transitionTo(stateTurnOnDlb);
-  }
-  else if ((thermocoupleFan > COOL_DOWN_EXIT_FAN_TEMP + 15) ||
-           (upperFrontHeater.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-           (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-           (lowerFrontHeater.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-           (lowerRearHeater.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
-  {
-    poStateMachine.transitionTo(stateCoolDown);
-  }
-
-  pizzaOvenStartRequested = false;
-  pizzaOvenStopRequested = false;
-}
-
-void stateStandbyExit()
-{
-  Serial.println(F("DEBUG SX"));
-  pizzaOvenStartRequested = false;
-  pizzaOvenStopRequested = false;
-}
-
-/*
-   State Machine stateTurnOnDlb
-*/
-//State stateTurnOnDlb = State(stateTurnOnDlbEnter, stateTurnOnDlbUpdate, stateTurnOnDlbExit);
-void stateTurnOnDlbEnter(void)
-{
-  Serial.println(F("DEBUG Entering stateTurnOnDlb."));
-  CoolingFanControl(coolingFanHigh);
-}
-
-void stateTurnOnDlbUpdate(void)
-{
-  if (!powerButtonIsOn() || pizzaOvenStopRequested)
-  {
-    pizzaOvenStopRequested = false;
-    poStateMachine.transitionTo(stateCoolDown);
-  }
-  else if (l2DlbIsOn())
-  {
-    poStateMachine.transitionTo(stateHeatCycle);
-  }
-}
-
-void stateTurnOnDlbExit(void)
-{
-  Serial.println(F("DEBUG Exiting stateTurnOnDlb."));
-  pizzaOvenStartRequested = false;
-  pizzaOvenStopRequested = false;
-
-}
-
-//------------------------------------------
-//state machine stateHeatCycle
-//------------------------------------------
-//State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
-uint32_t currentTriacTimerCounter, oldTriacTimerCounter;
-uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
-
-void stateHeatCycleEnter()
-{
-  Serial.println(F("DEBUG stateHeatCycleEnter"));
-
-  // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
-  triacTimeBase = 0;
-  relayTimeBase = 0;
-  // Fake the old time so that we exercise the relays the first time through
-  oldTriacTimerCounter = 100000;
-  oldRelayTimerCounter = 100000;
-
-  changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
-  changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
-
-  upperFrontPidIo.Output = 0.0;
-  upperFrontPID.SetMode(AUTOMATIC);
-  upperRearPidIo.Output = 0.0;
-  upperRearPID.SetMode(AUTOMATIC);
-}
-
-void stateHeatCycleUpdate()
-{
-  static uint32_t oldTime = 0;
-  uint32_t newTime = millis();
-
-  // only update the relays periodically
-  if (oldTime < newTime)
-  {
-    if ((newTime - oldTime) < 7)
-    {
-      return;
-    }
-  }
-  oldTime = newTime;
-
-  // Save working value triacTimeBase since can be updated by interrupt
-  currentTriacTimerCounter = triacTimeBase;
-  currentRelayTimerCounter = relayTimeBase;
-
-  // Handle triac control
-  if (currentTriacTimerCounter != oldTriacTimerCounter)
-  {
-    //    CoolingFanControl(true);
-#ifdef USE_PID
-    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
-    UpdateHeatControlWithPID(&upperRearHeater, currentTriacTimerCounter);
-#else
-    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
-    UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
-#endif
-
-    UpdateHeaterHardware();
-
-    oldTriacTimerCounter = currentTriacTimerCounter;
-  }
-
-  // Handle relay control
-  if (currentRelayTimerCounter != oldRelayTimerCounter)
-  {
-    //    CoolingFanControl(true);
-    UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
-    UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
-
-    UpdateHeaterHardware();
-
-    oldRelayTimerCounter = currentRelayTimerCounter;
-  }
-
-  if (!powerButtonIsOn() || !l2DlbIsOn() || pizzaOvenStopRequested)
-  {
-    pizzaOvenStopRequested = false;
-    poStateMachine.transitionTo(stateCoolDown);
-  }
-}
-
-void stateHeatCycleExit()
-{
-  Serial.println("DEBUG HX");
-  AllHeatersOffStateClear();
-  upperFrontPID.SetMode(MANUAL);
-  upperFrontPidIo.Output = 0.0;
-  upperRearPID.SetMode(MANUAL);
-  upperRearPidIo.Output = 0.0;
-  pizzaOvenStartRequested = false;
-  pizzaOvenStopRequested = false;
-}
-
-//------------------------------------------
-//state machine stateCoolDown
-//------------------------------------------
-//State stateCoolDown = State(stateCoolDownEnter,
-//	stateCoolDownUpdate, stateCoolDownExit);
-
-void stateCoolDownEnter()
-{
-  Serial.println(F("DEBUG stateCoolDown"));
-  CoolingFanControl(coolingFanLow);
-  AllHeatersOffStateClear();
-}
-
-void stateCoolDownUpdate()
-{
-  AllHeatersOffStateClear();
-
-  // For now just check cool down on fan
-  if ((thermocoupleFan <= COOL_DOWN_EXIT_FAN_TEMP) &&
-      (upperFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (upperRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (lowerRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP))
-  {
-    CoolingFanControl(coolingFanOff);
-    poStateMachine.transitionTo(stateStandby);
-  }
-  else if (powerButtonIsOn() && pizzaOvenStartRequested)
-  {
-    pizzaOvenStartRequested = false;
-    poStateMachine.transitionTo(stateTurnOnDlb);
-  }
-}
-
-void stateCoolDownExit()
-{
-  Serial.println(F("DEBUG CX"));
-  pizzaOvenStartRequested = false;
-  pizzaOvenStopRequested = false;
-
 }
 

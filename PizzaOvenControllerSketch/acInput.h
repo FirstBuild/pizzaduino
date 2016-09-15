@@ -38,7 +38,7 @@ void acInputsRun(void);
 
 // Call the get functions to get the status of the AC inputs
 bool powerButtonIsOn(void);
-bool l2DlbIsOn(void);
-bool TcoInputIsOn(void);
+bool sailSwitchIsOn(void);
+bool tcoInputIsOn(void);
 
 #endif

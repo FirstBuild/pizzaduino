@@ -107,12 +107,12 @@ bool powerButtonIsOn(void)
   return acInputOneState;
 }
 
-bool l2DlbIsOn(void)
+bool sailSwitchIsOn(void)
 {
   return acInputTwoState;
 }
 
-bool TcoInputIsOn(void)
+bool tcoInputIsOn(void)
 {
   return acInputThreeState;
 }

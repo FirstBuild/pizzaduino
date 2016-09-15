@@ -18,14 +18,11 @@
   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
   THE SOFTWARE.
- */
+*/
 
-#ifndef CONFIG_H_
-#define CONFIG_H_
+#include "tcoCheck.h"
+#include "acInput.h"
 
-#define USE_PID
-//#define ENABLE_PID_TUNING
 
-#define COOL_DOWN_EXIT_HEATER_TEMP    ((double)350.0)  // 150 degrees F
 
-#endif /* CONFIG_H_ */
+

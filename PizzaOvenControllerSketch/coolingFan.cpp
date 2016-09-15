@@ -39,15 +39,15 @@ void CoolingFanControl(CoolingFanSpeed speed)
     Serial.println(F("DEBUG Changing the state of the cooling fan."));
       case coolingFanOff:
         changeRelayState(COOLING_FAN_RELAY, relayStateOff);
-        changeRelayState(COOLING_FAN_HIGH_SPEED, relayStateOff);
+        changeRelayState(COOLING_FAN_LOW_SPEED, relayStateOff);
         break;
       case coolingFanLow:
-        changeRelayState(COOLING_FAN_HIGH_SPEED, relayStateOff);
+        changeRelayState(COOLING_FAN_LOW_SPEED, relayStateOn);
         changeRelayState(COOLING_FAN_RELAY, relayStateOn);
         break;
       case coolingFanHigh:
         changeRelayState(COOLING_FAN_RELAY, relayStateOn);
-        changeRelayState(COOLING_FAN_HIGH_SPEED, relayStateOn);
+        changeRelayState(COOLING_FAN_LOW_SPEED, relayStateOff);
       break;
     }
   }
