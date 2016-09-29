@@ -20,9 +20,18 @@
   THE SOFTWARE.
 */
 
-#include "tcoCheck.h"
-#include "acInput.h"
+#ifndef TCO_AND_FAN_CHECK_H
+#define TCO_AND_FAN_CHECK_H
 
+class TcoAndFan
+{
+  public: 
+    TcoAndFan(void);
+    void reset(void);
+    bool areOk(void);
+    bool coolingFanHasFailed(void);
+    bool tcoHasFailed(void);
+};
 
-
+#endif // TCO_AND_FAN_CHECK_H
 

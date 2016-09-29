@@ -20,10 +20,56 @@
   THE SOFTWARE.
 */
 
-#ifndef TCO_CHECK_H
-#define TCO_CHECK_H
+#include "tcoAndFanCheck.h"
+#include "acInput.h"
+#include <Arduino.h>
 
+static uint32_t oldMillis;
+static bool m_TcoHasFailed = false;
+static bool m_CoolingFanHasFailed = false;
 
+extern bool doorHasDeployed;
 
-#endif // TCO_CHECK_H
+TcoAndFan::TcoAndFan(void) 
+{
+  oldMillis = millis();
+}
+
+void TcoAndFan::reset(void) 
+{
+  oldMillis = millis();
+}
+
+bool TcoAndFan::areOk(void)
+{
+  if (powerButtonIsOn())
+  {
+    if(millis() - oldMillis > 5000)
+    {
+      if (!tcoInputIsOn())
+      {
+        m_TcoHasFailed = true;
+      }
+      else if (!sailSwitchIsOn())
+      {
+        m_CoolingFanHasFailed = true;
+      }
+    }
+  }
+  else
+  {
+    oldMillis = millis();
+  }
+  return !m_CoolingFanHasFailed && !m_TcoHasFailed && !doorHasDeployed;
+}
+
+bool TcoAndFan::coolingFanHasFailed(void)
+{
+   return m_CoolingFanHasFailed;
+}
+
+bool TcoAndFan::tcoHasFailed(void)
+{
+   return m_TcoHasFailed;
+}
 

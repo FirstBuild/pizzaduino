@@ -7,9 +7,11 @@
 #include "coolingFan.h"
 #include "pinDefinitions.h"
 #include "PID_v1.h"
+#include "tcoAndFanCheck.h"
 
 static bool pizzaOvenStartRequested = false;
 static bool pizzaOvenStopRequested = false;
+static TcoAndFan tcoAndFan;
 
 // Externed globals...sniff
 extern Heater upperFrontHeater;
@@ -18,6 +20,7 @@ extern Heater  lowerFrontHeater;
 extern Heater lowerRearHeater;
 extern volatile uint32_t triacTimeBase;
 extern volatile uint32_t relayTimeBase;
+extern bool doorHasDeployed;
 
 #ifdef USE_PID
 // PID stuff
@@ -27,14 +30,6 @@ extern PidIo upperRearPidIo;
 extern PID upperFrontPID;
 extern PID upperRearPID;
 #endif
-
-static uint32_t oldMillis;
-
-static bool tcoHasFailed = false;
-static bool coolingFanHasFailed = false;
-
-bool coollingFanFailed(void) {return coolingFanHasFailed;}
-bool tcoFailed(void) {return tcoHasFailed;}
  
 //------------------------------------------
 //state machine setup
@@ -44,15 +39,10 @@ static void stateStandbyUpdate();
 static void stateStandbyExit();
 static State stateStandby = State(stateStandbyEnter, stateStandbyUpdate, stateStandbyExit);
 
-static void stateTurnOnTcoEnter();
-static void stateTurnOnTcoUpdate();
-static void stateTurnOnTcoExit();
-static State stateTurnOnTco = State(stateTurnOnTcoEnter, stateTurnOnTcoUpdate, stateTurnOnTcoExit);
-
-static void stateTurnOnSailSwitchEnter();
-static void stateTurnOnSailSwitchUpdate();
-static void stateTurnOnSailSwitchExit();
-static State stateTurnOnSailSwitch = State(stateTurnOnSailSwitchEnter, stateTurnOnSailSwitchUpdate, stateTurnOnSailSwitchExit);
+static void stateWaitForDlbEnter();
+static void stateWaitForDlbUpdate();
+static void stateWaitForDlbExit();
+static State stateWaitForDlb = State(stateWaitForDlbEnter, stateWaitForDlbUpdate, stateWaitForDlbExit);
 
 static void stateHeatCycleEnter();
 static void stateHeatCycleUpdate();
@@ -94,13 +84,9 @@ cookingState getCookingState(void)
   {
     state = cookingStandby;
   }
-  else if (poStateMachine.isInState(stateTurnOnTco))
+  else if (poStateMachine.isInState(stateWaitForDlb))
   {
-    state = cookingWaitForTco;
-  }
-  else if (poStateMachine.isInState(stateTurnOnSailSwitch))
-  {
-    state = cookingWaitForSailSwitch;
+    state = cookingWaitForDlb;
   }
   else if (poStateMachine.isInState(stateHeatCycle))
   {
@@ -123,16 +109,17 @@ static void stateStandbyEnter()
 {
   Serial.println(F("DEBUG stateStandbyEnter"));
   AllHeatersOffStateClear();
+  CoolingFanControl(coolingFanOff);
 }
 
 static void stateStandbyUpdate()
 {
   AllHeatersOffStateClear();
-  if (!coolingFanHasFailed)
+  if (!tcoAndFan.coolingFanHasFailed() && !tcoAndFan.tcoHasFailed() && !doorHasDeployed)
   {
-    if (powerButtonIsOn() && pizzaOvenStartRequested && !tcoHasFailed)
+    if (powerButtonIsOn() && pizzaOvenStartRequested)
     {
-      poStateMachine.transitionTo(stateTurnOnTco);
+      poStateMachine.transitionTo(stateWaitForDlb);
     }
     else if ((upperFrontHeater.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
              (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
@@ -152,87 +139,39 @@ static void stateStandbyExit()
   Serial.println(F("DEBUG SX"));
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
+  tcoAndFan.reset();
 }
 
 /*
-   State Machine stateTurnOnTco
+   State Machine stateWaitForDlb
 */
-static void stateTurnOnTcoEnter(void)
+//State stateWaitForDlb = State(stateWaitForDlbEnter, stateWaitForDlbUpdate, stateWaitForDlbExit);
+static void stateWaitForDlbEnter(void)
 {
-  Serial.println(F("DEBUG Entering stateTurnOnTco."));
+  Serial.println(F("DEBUG Entering stateWaitForDlb."));
   CoolingFanControl(coolingFanHigh);
-  oldMillis = millis();
 }
 
-static void stateTurnOnTcoUpdate(void)
+static void stateWaitForDlbUpdate(void)
 {
-  if (!powerButtonIsOn() || pizzaOvenStopRequested)
+  if (!tcoAndFan.areOk())
+  {
+    poStateMachine.transitionTo(stateStandby);    
+  }
+  else if (!powerButtonIsOn() || pizzaOvenStopRequested)
   {
     pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
   }
-  else if (tcoInputIsOn())
-  {
-    poStateMachine.transitionTo(stateTurnOnSailSwitch);
-  }
-  else
-  {
-    if ((millis() - oldMillis) > 5000)
-    {
-      // tco fault state...
-      tcoHasFailed = true;
-      Serial.println(F("DEBUG TCO input not detected after delay, failure."));
-      poStateMachine.transitionTo(stateCoolDown);
-    }
-  }
-}
-
-static void stateTurnOnTcoExit(void)
-{
-  Serial.println(F("DEBUG Exiting stateTurnOnTco."));
-  pizzaOvenStartRequested = false;
-  pizzaOvenStopRequested = false;
-
-}
-
-/*
-   State Machine stateTurnOnSailSwitch
-*/
-//State stateTurnOnSailSwitch = State(stateTurnOnSailSwitchEnter, stateTurnOnSailSwitchUpdate, stateTurnOnSailSwitchExit);
-static void stateTurnOnSailSwitchEnter(void)
-{
-  Serial.println(F("DEBUG Entering stateTurnOnSailSwitch."));
-  CoolingFanControl(coolingFanHigh);
-  oldMillis = millis();
-}
-
-static void stateTurnOnSailSwitchUpdate(void)
-{
-  if (!powerButtonIsOn() || pizzaOvenStopRequested)
-  {
-    pizzaOvenStopRequested = false;
-    poStateMachine.transitionTo(stateCoolDown);
-  }
-  else if (!tcoInputIsOn())
-  {
-      tcoHasFailed = true;
-      Serial.println(F("DEBUG TCO input failure while waiting for sail switch."));
-      poStateMachine.transitionTo(stateCoolDown);
-  }
-  else if (sailSwitchIsOn())
+  else if (sailSwitchIsOn() && tcoInputIsOn())
   {
     poStateMachine.transitionTo(stateHeatCycle);
-  }
-  else if(millis() - oldMillis > 5000)
-  {
-    // fan failure
-    coolingFanHasFailed = true;
-  }
+  } 
 }
 
-static void stateTurnOnSailSwitchExit(void)
+static void stateWaitForDlbExit(void)
 {
-  Serial.println(F("DEBUG Exiting stateTurnOnSailSwitch."));
+  Serial.println(F("DEBUG Exiting stateWaitForDlb."));
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
 
@@ -270,17 +209,10 @@ static void stateHeatCycleUpdate()
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
 
-  // check for cooling fan failure
-  if(!sailSwitchIsOn())
+  if (!tcoAndFan.areOk())
   {
-    coolingFanHasFailed = true;
     poStateMachine.transitionTo(stateStandby);
-  }
-  // check for cooling fan failure
-  if(!tcoInputIsOn())
-  {
-    tcoHasFailed = true;
-    poStateMachine.transitionTo(stateCoolDown);
+    return;
   }
 
   // only update the relays periodically
@@ -362,7 +294,12 @@ static void stateCoolDownUpdate()
 {
   AllHeatersOffStateClear();
 
-  // For now just check cool down on fan
+  if (!tcoAndFan.areOk())
+  {
+    poStateMachine.transitionTo(stateStandby);
+    return;
+  }
+
   if ((upperFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
       (upperRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
       (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
@@ -374,7 +311,7 @@ static void stateCoolDownUpdate()
   else if (powerButtonIsOn() && pizzaOvenStartRequested)
   {
     pizzaOvenStartRequested = false;
-    poStateMachine.transitionTo(stateTurnOnSailSwitch);
+    poStateMachine.transitionTo(stateWaitForDlb);
   }
 }
 

@@ -1,4 +1,4 @@
-/*
+  /*
   Copyright (c) 2015 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -43,6 +43,9 @@
 #include "config.h"
 #include "heater.h"
 #include "cookingStateMachine.h"
+#include "tcoAndFanCheck.h"
+
+static TcoAndFan tcoAndFan;
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffff)
@@ -240,6 +243,11 @@ void PeriodicOutputTemps()
     Serial.print(F(" "));
     Serial.println(intTempCLR);
 
+    Serial.print(F("DEBUG: "));
+    Serial.print((uint16_t)readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
+    Serial.print(F(", "));
+    Serial.println((uint16_t)getTempFromTcInF(ANALOG_THERMO_UPPER_FRONT));
+
     outputAcInputStates();
     outputDoorStatus();
 
@@ -248,11 +256,8 @@ void PeriodicOutputTemps()
       case cookingStandby:
         Serial.println(F("State Standby"));
         break;
-      case cookingWaitForTco:
-        Serial.println(F("State TCO"));
-        break;
-      case cookingWaitForSailSwitch:
-        Serial.println(F("State Sail Switch"));
+      case cookingWaitForDlb:
+        Serial.println(F("State DLB"));
         break;
       case cookingCooking:
         Serial.println(F("State Cooking"));
@@ -260,6 +265,15 @@ void PeriodicOutputTemps()
       case cookingCooldown:
         Serial.println(F("State Cooldown"));
         break;
+    }
+
+    if(tcoAndFan.tcoHasFailed())
+    {
+        Serial.println(F("TCO failure"));      
+    }
+    if(tcoAndFan.coolingFanHasFailed())
+    {
+        Serial.println(F("Cooling fan failure"));      
     }
 
     Serial.print(F("Relays "));

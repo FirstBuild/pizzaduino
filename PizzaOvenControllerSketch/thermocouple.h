@@ -35,5 +35,6 @@
 #define ANALOG_REFERENCE_VOLTAGE    ((double)5.0)
 
 float readAD8495KTC(uint8_t pin);
+float getTempFromTcInF(uint8_t pin);
 
 #endif
