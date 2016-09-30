@@ -54,9 +54,9 @@ static TcoAndFan tcoAndFan;
 //------------------------------------------
 // Macros
 //------------------------------------------
-#define PROTOCOL_MAJOR_VERSION   0
-#define PROTOCOL_MINOR_VERSION   2005
-#define PROTOCOL_BUGFIX_VERSION  0
+#define FIRMWARE_MAJOR_VERSION   1
+#define FIRMWARE_MINOR_VERSION   0
+#define FIRMWARE_BUILD_VERSION   0
 
 //------------------------------------------
 // Macros for Constants and Pin Definitions
@@ -242,11 +242,6 @@ void PeriodicOutputTemps()
     Serial.print(intTempCLF);
     Serial.print(F(" "));
     Serial.println(intTempCLR);
-
-    Serial.print(F("DEBUG: "));
-    Serial.print((uint16_t)readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
-    Serial.print(F(", "));
-    Serial.println((uint16_t)getTempFromTcInF(ANALOG_THERMO_UPPER_FRONT));
 
     outputAcInputStates();
     outputDoorStatus();
@@ -565,11 +560,11 @@ void handleIncomingCommands(void)
 
         case 'v': // query protocol version
           Serial.print(F("V "));
-          Serial.print(PROTOCOL_MAJOR_VERSION);
+          Serial.print(FIRMWARE_MAJOR_VERSION);
           Serial.print(F("."));
-          Serial.print(PROTOCOL_MINOR_VERSION);
+          Serial.print(FIRMWARE_MINOR_VERSION);
           Serial.print(F(" bugfix "));
-          Serial.println(PROTOCOL_BUGFIX_VERSION);
+          Serial.println(FIRMWARE_BUILD_VERSION);
           receivedCommandBufferIndex = 0;
           break;
 

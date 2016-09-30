@@ -62,6 +62,7 @@ const PROGMEM float analogAD8495KTemp[A2D8495_K_TABLE_SIZE] =
   780, 800, 820, 840, 860, 880, 900
 };
 
+#ifdef KILL
 const PROGMEM uint16_t ad8497Lookup[] =
 { 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 22, 23, 
 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 
@@ -131,6 +132,7 @@ float getTempFromTcInF(uint8_t pin)
 {
   return c2f(getTempFromTcInC(pin));
 }
+#endif
 
 // Modified for _out to be uint8_t, so cast as (float) before using
 static float FmultiMap(float val, const float * _in, const float * _out, uint8_t size)
