@@ -121,10 +121,10 @@ static void stateStandbyUpdate()
     {
       poStateMachine.transitionTo(stateWaitForDlb);
     }
-    else if ((upperFrontHeater.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-             (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-             (lowerFrontHeater.thermocouple > COOL_DOWN_EXIT_HEATER_TEMP + 15) ||
-             (lowerRearHeater.thermocouple  > COOL_DOWN_EXIT_HEATER_TEMP + 15))
+    else if ((upperFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15) ||
+             (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_TEMP + 15) ||
+             (lowerFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15) ||
+             (lowerRearHeater.thermocouple  > COOL_DOWN_EXIT_TEMP + 15))
     {
       poStateMachine.transitionTo(stateCoolDown);
     }
@@ -300,10 +300,10 @@ static void stateCoolDownUpdate()
     return;
   }
 
-  if ((upperFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (upperRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_HEATER_TEMP) &&
-      (lowerRearHeater.thermocouple  <= COOL_DOWN_EXIT_HEATER_TEMP))
+  if ((upperFrontHeater.thermocouple <= COOL_DOWN_EXIT_TEMP) &&
+      (upperRearHeater.thermocouple  <= COOL_DOWN_EXIT_TEMP) &&
+      (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_TEMP) &&
+      (lowerRearHeater.thermocouple  <= COOL_DOWN_EXIT_TEMP))
   {
     CoolingFanControl(coolingFanOff);
     poStateMachine.transitionTo(stateStandby);

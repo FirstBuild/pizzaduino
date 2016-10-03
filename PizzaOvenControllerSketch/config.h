@@ -26,6 +26,6 @@
 #define USE_PID
 //#define ENABLE_PID_TUNING
 
-#define COOL_DOWN_EXIT_HEATER_TEMP    ((double)350.0)  // 150 degrees F
+#define COOL_DOWN_EXIT_TEMP    ((double)425.0)
 
 #endif /* CONFIG_H_ */
