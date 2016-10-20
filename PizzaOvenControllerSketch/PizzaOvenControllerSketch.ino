@@ -56,7 +56,7 @@ static TcoAndFan tcoAndFan;
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   0
+#define FIRMWARE_BUILD_VERSION   1
 
 //------------------------------------------
 // Macros for Constants and Pin Definitions
@@ -101,6 +101,8 @@ Heater *aHeaters[4] =
   &lowerFrontHeater,
   &lowerRearHeater
 };
+
+const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEMP, MAX_LOWER_TEMP};
 
 #ifdef USE_PID
 // PID stuff
@@ -525,6 +527,7 @@ void handleIncomingCommands(void)
   static uint8_t receivedCommandBufferIndex = 0;
   uint8_t lastByteReceived;
   PID *pPid = NULL;
+  uint8_t heaterIndex;
 
   if (Serial.available() > 0)
   {
@@ -607,18 +610,27 @@ void handleIncomingCommands(void)
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
             Heater *pHeater;
-            if (CharIsADigit(receivedCommandBuffer[1]) && ((receivedCommandBuffer[1] - '0') < 5))
+            if (CharIsADigit(receivedCommandBuffer[1]) && (receivedCommandBuffer[1] > '0') && (receivedCommandBuffer[1] < '5'))
             {
-              pHeater = aHeaters[(receivedCommandBuffer[1] - '0')-1];
+              heaterIndex = (receivedCommandBuffer[1] - '0')-1;
+              pHeater = aHeaters[heaterIndex];
               if (receivedCommandBuffer[0] == 'l')
               {
                 Serial.println(F("DEBUG Setting lower setpoint."));
                 GetInputValue(&pHeater->parameter.tempSetPointLowOn, &receivedCommandBuffer[2]);
+                if (&pHeater->parameter.tempSetPointLowOn > maxTempSetting[heaterIndex])
+                {
+                  pHeater->parameter.tempSetPointLowOn = maxTempSetting[heaterIndex];
+                }
               }
               else
               {
                 Serial.println(F("DEBUG Setting upper setpoint."));
                 GetInputValue(&pHeater->parameter.tempSetPointHighOff, &receivedCommandBuffer[2]);
+                if (&pHeater->parameter.tempSetPointHighOff > maxTempSetting[heaterIndex])
+                {
+                  pHeater->parameter.tempSetPointHighOff = maxTempSetting[heaterIndex];
+                }
               }
               saveParametersToMemory();
             }
@@ -637,7 +649,7 @@ void handleIncomingCommands(void)
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
             Heater *pHeater;
-            if (CharIsADigit(receivedCommandBuffer[1]) && ((receivedCommandBuffer[1] - '0') < 5))
+            if (CharIsADigit(receivedCommandBuffer[1]) && (receivedCommandBuffer[1] > '0') && (receivedCommandBuffer[1] < '5'))
             {
               pHeater = aHeaters[(receivedCommandBuffer[1] - '0')-1];
               if (receivedCommandBuffer[0] == 'n')
@@ -667,9 +679,6 @@ void handleIncomingCommands(void)
           // wait for CR or LF
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
-//            if (poStateMachine.isInState(stateStandby) ||
-//                poStateMachine.isInState(stateCoolDown))
-//            {
             if ((cookingStandby == getCookingState()) ||
                 cookingCooldown == getCookingState())
             {
@@ -731,9 +740,6 @@ void handleIncomingCommands(void)
         case 'g':
           if ((lastByteReceived == 10) || (lastByteReceived == 13))
           {
-//            if (poStateMachine.isInState(stateStandby) ||
-//                poStateMachine.isInState(stateCoolDown))
-//            {
             if ((cookingStandby == getCookingState()) ||
                 cookingCooldown == getCookingState())
             {
