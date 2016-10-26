@@ -328,35 +328,18 @@ void PeriodicOutputTemps()
 #endif
 
     // stuff for impulse response testing
-//#define TEMP_BUF_SIZE 10
-//  static float tempBuf[TEMP_BUF_SIZE];
-//  static uint8_t bufIndex = 0;
-//  uint8_t compareIndex;
-//  float diff;
-
-    //    tempBuf[bufIndex] = intTempCUF;
-    //    compareIndex = bufIndex + 1;
-    //    if (compareIndex >= TEMP_BUF_SIZE)
-    //    {
-    //      compareIndex = 0;
-    //    }
-    //    diff = tempBuf[bufIndex] - tempBuf[compareIndex];
-    //    bufIndex++;
-    //    if (bufIndex >= TEMP_BUF_SIZE)
-    //    {
-    //      bufIndex = 0;
-    //    }
-    //    Serial.print(F("Time Setpoint Temp Dutycycle Diff, "));
-    //    Serial.print(millis());
-    //    Serial.print(F(", "));
-    //    Serial.print(Setpoint);
-    //    Serial.print(F(", "));
-    //    Serial.print(intTempCUF);
-    //    Serial.print(F(", "));
-    //    Serial.print(Output);
-    //    Serial.print(F(", "));
-    //    Serial.println(diff);
-  }
+    Serial.println(F("DEBUG, Time, UF DC, UF Temp, UR DC, UR Temp"));
+    Serial.print(F("DEBUG, "));
+    Serial.print(millis());
+    Serial.print(F(", "));
+    Serial.print(upperFrontPidIo.Output);
+    Serial.print(F(", "));
+    Serial.print(intTempCUF);
+    Serial.print(F(", "));
+    Serial.print(upperRearPidIo.Output);
+    Serial.print(F(", "));
+    Serial.println(intTempCUR);
+    }
 }
 
 //------------------------------------------
@@ -916,8 +899,12 @@ void loop()
   upperFrontPID.Compute();
   upperRearPID.Compute();
   ConvertHeaterPercentCounts();
-  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
-  upperRearHeater.heaterCountsOn = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+  
+  upperFrontPidIo.Output = upperFrontHeater.parameter.offPercent;
+  upperRearPidIo.Output = upperRearHeater.parameter.offPercent;
+
+//  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+//  upperRearHeater.heaterCountsOn = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
 #endif
 }
 
