@@ -88,10 +88,10 @@ DigitalInputDebounced doorInput(DOOR_STATUS_INPUT, false, true);
 
 static bool TCsHaveBeenInitialized = false;
 
-Heater upperFrontHeater = {{true, 1200, 1300,   0,  90}, 0, 0, relayStateOff, false, 0.0};
-Heater upperRearHeater  = {{true, 1100, 1200,  10, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerFrontHeater = {{true,  600,  650,  51, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerRearHeater  = {{true,  575,  625,   0,  49}, 0, 0, relayStateOff, false, 0};
+Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
+Heater upperRearHeater  = {{true, 1100, 1200,   0,  70}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{true,  620,  630,  50, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerRearHeater  = {{true,  595,  605,   0,  49}, 0, 0, relayStateOff, false, 0};
 
 // convenience array, could go into flash
 Heater *aHeaters[4] =
@@ -194,7 +194,7 @@ void AllHeatersOffStateClear()
 	for (i=0; i<4; i++)
 	{
 		aHeaters[i]->relayState = relayStateOff;
-		aHeaters[i]->heaterCoolDownState = false;
+		aHeaters[i]->heaterCoolDownState = true;
 	}
 
   UpdateHeaterHardware();
