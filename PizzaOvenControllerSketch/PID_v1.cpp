@@ -220,4 +220,7 @@ void PID::GetTerms(double *_pTerm, double *_iTerm, double *_dTerm) {
   *_dTerm = dTerm;
 }
 
+void PID::SeedITerm(double seed) {
+  ITerm = (ITerm > outMax) ? outMax : seed;
+}
 

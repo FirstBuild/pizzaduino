@@ -51,6 +51,7 @@ class PID
     int GetMode();						  //  inside the PID.
     int GetDirection();					  //
     void GetTerms(double *pTerm, double *iTerm, double *dTerm);
+    void SeedITerm(double seed);
 
   private:
     void Initialize();

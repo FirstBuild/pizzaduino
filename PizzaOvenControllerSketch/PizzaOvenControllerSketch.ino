@@ -235,7 +235,9 @@ void PeriodicOutputTemps()
     intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
     intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
 
-#ifndef ENABLE_PID_TUNING
+  handleRelayWatchdog();
+
+//#ifndef ENABLE_PID_TUNING
     Serial.print(F("Temps "));
     Serial.print(intTempCUF);
     Serial.print(F(" "));
@@ -291,7 +293,9 @@ void PeriodicOutputTemps()
     Serial.print(", thresh: ");
     Serial.println(lowerRearHeater.heaterCountsOn);
 
-#endif
+  handleRelayWatchdog();
+//#endif
+
 
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
@@ -302,53 +306,81 @@ void PeriodicOutputTemps()
     upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
     
     Serial.println(F("DEBUG, Time, UKP, UKI, UKD, URaw, UTemp, UDC, USetpoint, UpTerm, UiTerm, UdTerm, LKP, LKI,LUKD, LRaw, LTemp, LDC, LSetpoint, LpTerm, LiTerm, LdTerm"));
+  handleRelayWatchdog();
     Serial.print(F("DEBUG, "));
+  handleRelayWatchdog();
     Serial.print(millis());
+  handleRelayWatchdog();
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperRearPID.GetKp(), 7);
+  handleRelayWatchdog();
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperRearPID.GetKi(), 7);
+  handleRelayWatchdog();
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperRearPID.GetKd(), 7);
+  handleRelayWatchdog();
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperRearHeater.thermocouple);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperRearPidIo.Output);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperRearPidIo.Setpoint);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(pTerm, 6);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(iTerm, 6);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(dTerm, 6);
-    
+  handleRelayWatchdog();
     upperFrontPID.GetTerms(&pTerm, &iTerm, &dTerm);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperFrontPID.GetKp(), 7);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperFrontPID.GetKi(), 7);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperFrontPID.GetKd(), 7);
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
     Serial.print(F(", "));
+  handleRelayWatchdog();
     Serial.print(upperFrontHeater.thermocouple);
+  handleRelayWatchdog();
     Serial.print(F(", "));
     Serial.print(upperFrontPidIo.Output);
+  handleRelayWatchdog();
     Serial.print(F(", "));
     Serial.print(upperFrontPidIo.Setpoint);
+  handleRelayWatchdog();
     Serial.print(F(", "));
     Serial.print(pTerm, 6);
+  handleRelayWatchdog();
     Serial.print(F(", "));
     Serial.print(iTerm, 6);
+  handleRelayWatchdog();
     Serial.print(F(", "));
     Serial.print(dTerm, 6);
+  handleRelayWatchdog();
     Serial.println("");
 #endif
 #endif
+  handleRelayWatchdog();
 
     // stuff for impulse response testing
 //    Serial.println(F("DEBUG, Time, UF DC, UF Temp, UR DC, UR Temp"));
@@ -923,7 +955,7 @@ void loop()
   upperRearPID.Compute();
   ConvertHeaterPercentCounts();
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
-  upperRearHeater.heaterCountsOff  = (uint16_t)(((uint32_t)((upperRearPidIo.Output  * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+  upperRearHeater.heaterCountsOn  = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
 #endif
 }
 

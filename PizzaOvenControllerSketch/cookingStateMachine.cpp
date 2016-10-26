@@ -177,6 +177,22 @@ static void stateWaitForDlbExit(void)
 
 }
 
+
+/*
+ * UF = 4.2266777983124E-5 x^2 - 0.0083436994 x + 7.0316553821
+ * UR = 5.49012226585957E-5 x^2 - 0.0238419207 x + 11.2096886045
+*/
+
+double getUFSeedValue(double t)
+{
+   return 0.000042266777983124 * t * t - 0.0083436994 * t + 7.0316553821;
+}
+
+double getURSeedValue(double t)
+{
+   return 0.0000549012226585957 * t * t - 0.0238419207 * t + 11.2096886045;
+
+}
 //------------------------------------------
 //state machine stateHeatCycle
 //------------------------------------------
@@ -186,6 +202,8 @@ static uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 
 static void stateHeatCycleEnter()
 {
+  double seed;
+  
   Serial.println(F("DEBUG stateHeatCycleEnter"));
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
@@ -197,10 +215,11 @@ static void stateHeatCycleEnter()
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
-
-  upperFrontPidIo.Output = 0.0;
+  
+  upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
   upperFrontPID.SetMode(AUTOMATIC);
-  upperRearPidIo.Output = 0.0;
+  
+  upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
   upperRearPID.SetMode(AUTOMATIC);
 }
 
