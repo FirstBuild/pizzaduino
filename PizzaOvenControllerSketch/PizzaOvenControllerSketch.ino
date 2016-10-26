@@ -88,9 +88,9 @@ DigitalInputDebounced doorInput(DOOR_STATUS_INPUT, false, true);
 
 static bool TCsHaveBeenInitialized = false;
 
-Heater upperFrontHeater = {{true, 1200, 1300,   0,  90}, 0, 0, relayStateOff, false, 0.0};
-Heater upperRearHeater  = {{true, 1100, 1200,  10, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerFrontHeater = {{true,  600,  650,  51, 100}, 0, 0, relayStateOff, false, 0};
+Heater upperFrontHeater = {{true, 1200, 1300,   0,  100}, 0, 0, relayStateOff, false, 0.0};
+Heater upperRearHeater  = {{true, 1100, 1200,  0, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{true,  600,  650,  50, 100}, 0, 0, relayStateOff, false, 0};
 Heater lowerRearHeater  = {{true,  575,  625,   0,  49}, 0, 0, relayStateOff, false, 0};
 
 // convenience array, could go into flash
@@ -300,8 +300,9 @@ void PeriodicOutputTemps()
     double dTerm;
 
     upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
-
-    Serial.print(F("Time KP KI KD Raw Temp % Set pTerm iTerm dTerm, "));
+    
+    Serial.println(F("DEBUG, Time, UKP, UKI, UKD, URaw, UTemp, UDC, USetpoint, UpTerm, UiTerm, UdTerm, LKP, LKI,LUKD, LRaw, LTemp, LDC, LSetpoint, LpTerm, LiTerm, LdTerm"));
+    Serial.print(F("DEBUG, "));
     Serial.print(millis());
     Serial.print(F(", "));
     Serial.print(upperRearPID.GetKp(), 7);
@@ -323,22 +324,44 @@ void PeriodicOutputTemps()
     Serial.print(iTerm, 6);
     Serial.print(F(", "));
     Serial.print(dTerm, 6);
+    
+    upperFrontPID.GetTerms(&pTerm, &iTerm, &dTerm);
+    Serial.print(F(", "));
+    Serial.print(upperFrontPID.GetKp(), 7);
+    Serial.print(F(", "));
+    Serial.print(upperFrontPID.GetKi(), 7);
+    Serial.print(F(", "));
+    Serial.print(upperFrontPID.GetKd(), 7);
+    Serial.print(F(", "));
+    Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
+    Serial.print(F(", "));
+    Serial.print(upperFrontHeater.thermocouple);
+    Serial.print(F(", "));
+    Serial.print(upperFrontPidIo.Output);
+    Serial.print(F(", "));
+    Serial.print(upperFrontPidIo.Setpoint);
+    Serial.print(F(", "));
+    Serial.print(pTerm, 6);
+    Serial.print(F(", "));
+    Serial.print(iTerm, 6);
+    Serial.print(F(", "));
+    Serial.print(dTerm, 6);
     Serial.println("");
 #endif
 #endif
 
     // stuff for impulse response testing
-    Serial.println(F("DEBUG, Time, UF DC, UF Temp, UR DC, UR Temp"));
-    Serial.print(F("DEBUG, "));
-    Serial.print(millis());
-    Serial.print(F(", "));
-    Serial.print(upperFrontPidIo.Output);
-    Serial.print(F(", "));
-    Serial.print(intTempCUF);
-    Serial.print(F(", "));
-    Serial.print(upperRearPidIo.Output);
-    Serial.print(F(", "));
-    Serial.println(intTempCUR);
+//    Serial.println(F("DEBUG, Time, UF DC, UF Temp, UR DC, UR Temp"));
+//    Serial.print(F("DEBUG, "));
+//    Serial.print(millis());
+//    Serial.print(F(", "));
+//    Serial.print(upperFrontPidIo.Output);
+//    Serial.print(F(", "));
+//    Serial.print(intTempCUF);
+//    Serial.print(F(", "));
+//    Serial.print(upperRearPidIo.Output);
+//    Serial.print(F(", "));
+//    Serial.println(intTempCUR);
     }
 }
 
@@ -899,12 +922,8 @@ void loop()
   upperFrontPID.Compute();
   upperRearPID.Compute();
   ConvertHeaterPercentCounts();
-  
-  upperFrontPidIo.Output = upperFrontHeater.parameter.offPercent;
-  upperRearPidIo.Output = upperRearHeater.parameter.offPercent;
-
-//  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
-//  upperRearHeater.heaterCountsOn = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+  upperRearHeater.heaterCountsOff  = (uint16_t)(((uint32_t)((upperRearPidIo.Output  * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
 #endif
 }
 

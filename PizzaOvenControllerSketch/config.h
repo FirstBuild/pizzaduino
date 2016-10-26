@@ -24,7 +24,7 @@
 #define CONFIG_H_
 
 #define USE_PID
-//#define ENABLE_PID_TUNING
+#define ENABLE_PID_TUNING
 
 #define COOL_DOWN_EXIT_TEMP    ((double)425.0)
 #define MAX_UPPER_TEMP (1300)
