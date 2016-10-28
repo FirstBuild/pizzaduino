@@ -56,7 +56,7 @@ static TcoAndFan tcoAndFan;
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   1
+#define FIRMWARE_BUILD_VERSION   2
 
 //------------------------------------------
 // Macros for Constants and Pin Definitions
@@ -107,8 +107,14 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
-PidIo upperFrontPidIo = {1000, 47, {0.175, 0.001110517, 0.4}};
-PidIo upperRearPidIo = {1000, 47, {0.175, 0.0010935, 0.4}};
+//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.001110517, 0.4}};
+//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0010935,   0.4}};
+//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.0005, 0.4}};
+//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0005, 0.4}};
+//PidIo upperFrontPidIo = {1000, 47, {0.25, 0.0005, 0.4}};
+//PidIo upperRearPidIo  = {1000, 47, {0.25, 0.0005, 0.4}};
+PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
+PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
                   upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd, DIRECT);
 PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRearPidIo.Setpoint,
@@ -224,177 +230,171 @@ void outputDoorStatus()
 void PeriodicOutputTemps()
 {
   uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
-
-  // Output Periodic Temperatures
-  if (true == outputTempPeriodic)
-  {
-    outputTempPeriodic = false;
-
-    intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
-    intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
-    intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
-    intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
-
-  handleRelayWatchdog();
-
-//#ifndef ENABLE_PID_TUNING
-    Serial.print(F("Temps "));
-    Serial.print(intTempCUF);
-    Serial.print(F(" "));
-    Serial.print(intTempCUR);
-    Serial.print(F(" "));
-    Serial.print(intTempCLF);
-    Serial.print(F(" "));
-    Serial.println(intTempCLR);
-
-    outputAcInputStates();
-    outputDoorStatus();
-
-    switch (getCookingState())
-    {
-      case cookingStandby:
-        Serial.println(F("State Standby"));
-        break;
-      case cookingWaitForDlb:
-        Serial.println(F("State DLB"));
-        break;
-      case cookingCooking:
-        Serial.println(F("State Cooking"));
-        break;
-      case cookingCooldown:
-        Serial.println(F("State Cooldown"));
-        break;
-    }
-
-    if(tcoAndFan.tcoHasFailed())
-    {
-        Serial.println(F("TCO failure"));      
-    }
-    if(tcoAndFan.coolingFanHasFailed())
-    {
-        Serial.println(F("Cooling fan failure"));      
-    }
-
-    Serial.print(F("Relays "));
-    Serial.print(digitalRead(HEATER_TRIAC_UPPER_FRONT));
-    Serial.print(F(" "));
-    Serial.print(digitalRead(HEATER_TRIAC_UPPER_REAR));
-    Serial.print(F(" "));
-    Serial.print(digitalRead(HEATER_RELAY_LOWER_FRONT));
-    Serial.print(F(" "));
-    Serial.println(digitalRead(HEATER_RELAY_LOWER_REAR));
-    Serial.print(F("PidDC "));
-    Serial.print(upperFrontPidIo.Output, 7);
-    Serial.print(F(" "));
-    Serial.println(upperRearPidIo.Output, 7);
-
-    Serial.print("Time: ");
-    Serial.print(relayTimeBase);
-    Serial.print(", thresh: ");
-    Serial.println(lowerRearHeater.heaterCountsOn);
-
-  handleRelayWatchdog();
-//#endif
-
-
+  static uint8_t printPhase = 0;
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
     double pTerm;
     double iTerm;
     double dTerm;
+#endif
+#endif
 
-    upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
+  intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
+  intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
+  intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
+  intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
+
+  switch (printPhase)
+  {
+    case 0:
+      if (true == outputTempPeriodic)
+      {
+        printPhase++;
+        outputTempPeriodic = false;
+      }
+      break;
+    case 1:
+      Serial.print(F("Temps "));
+      Serial.print(intTempCUF);
+      Serial.print(F(" "));
+      Serial.print(intTempCUR);
+      Serial.print(F(" "));
+      Serial.print(intTempCLF);
+      Serial.print(F(" "));
+      Serial.println(intTempCLR);
+  
+      outputAcInputStates();
+      outputDoorStatus();
     
-    Serial.println(F("DEBUG, Time, UKP, UKI, UKD, URaw, UTemp, UDC, USetpoint, UpTerm, UiTerm, UdTerm, LKP, LKI,LUKD, LRaw, LTemp, LDC, LSetpoint, LpTerm, LiTerm, LdTerm"));
-  handleRelayWatchdog();
-    Serial.print(F("DEBUG, "));
-  handleRelayWatchdog();
-    Serial.print(millis());
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperRearPID.GetKp(), 7);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperRearPID.GetKi(), 7);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperRearPID.GetKd(), 7);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperRearHeater.thermocouple);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperRearPidIo.Output);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperRearPidIo.Setpoint);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(pTerm, 6);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(iTerm, 6);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(dTerm, 6);
-  handleRelayWatchdog();
-    upperFrontPID.GetTerms(&pTerm, &iTerm, &dTerm);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperFrontPID.GetKp(), 7);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperFrontPID.GetKi(), 7);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperFrontPID.GetKd(), 7);
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
-    Serial.print(F(", "));
-  handleRelayWatchdog();
-    Serial.print(upperFrontHeater.thermocouple);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-    Serial.print(upperFrontPidIo.Output);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-    Serial.print(upperFrontPidIo.Setpoint);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-    Serial.print(pTerm, 6);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-    Serial.print(iTerm, 6);
-  handleRelayWatchdog();
-    Serial.print(F(", "));
-    Serial.print(dTerm, 6);
-  handleRelayWatchdog();
-    Serial.println("");
+      switch (getCookingState())
+      {
+        case cookingStandby:
+          Serial.println(F("State Standby"));
+          break;
+        case cookingWaitForDlb:
+          Serial.println(F("State DLB"));
+          break;
+        case cookingCooking:
+          Serial.println(F("State Cooking"));
+          break;
+        case cookingCooldown:
+          Serial.println(F("State Cooldown"));
+          break;
+      }
+    
+      if(tcoAndFan.tcoHasFailed())
+      {
+          Serial.println(F("TCO failure"));      
+      }
+      if(tcoAndFan.coolingFanHasFailed())
+      {
+          Serial.println(F("Cooling fan failure"));      
+      }
+    
+      Serial.print(F("Relays "));
+      Serial.print(digitalRead(HEATER_TRIAC_UPPER_FRONT));
+      Serial.print(F(" "));
+      Serial.print(digitalRead(HEATER_TRIAC_UPPER_REAR));
+      Serial.print(F(" "));
+      Serial.print(digitalRead(HEATER_RELAY_LOWER_FRONT));
+      Serial.print(F(" "));
+      Serial.println(digitalRead(HEATER_RELAY_LOWER_REAR));
+      Serial.print(F("PidDC "));
+      Serial.print(upperFrontPidIo.Output, 7);
+      Serial.print(F(" "));
+      Serial.println(upperRearPidIo.Output, 7);
+  
+      Serial.print("Time: ");
+      Serial.print(relayTimeBase);
+      Serial.print(", thresh: ");
+      Serial.println(lowerRearHeater.heaterCountsOn);
+      printPhase++;
+    break;
+    
+#ifdef USE_PID
+#ifdef ENABLE_PID_TUNING
+    case 2:
+      Serial.print(F("DEBUG, Time, UR KP, UR KI, UR KD, UR Raw, UR Temp, UR DC, UR Setpoint, UR pTerm, "));
+      printPhase++;
+      break;
+    case 3:
+      Serial.println(F("UR iTerm, UR dTerm, UF KP, UF KI, UF KD, UF Raw, UF Temp, UF DC, UF Setpoint, UF pTerm, UF iTerm, UF dTerm"));
+      printPhase++;
+      break;
+    case 4:
+      printPhase++;
+      break;
+    case 5:
+      Serial.print(F("DEBUG, "));
+      Serial.print(millis());
+      Serial.print(F(", "));
+      Serial.print(upperRearPID.GetKp(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperRearPID.GetKi(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperRearPID.GetKd(), 7);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 6:
+      Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
+      Serial.print(F(", "));
+      Serial.print(upperRearHeater.thermocouple);
+      Serial.print(F(", "));
+      Serial.print(upperRearPidIo.Output);
+      Serial.print(F(", "));
+      Serial.print(upperRearPidIo.Setpoint);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 7:
+      upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
+      Serial.print(pTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(iTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(dTerm, 6);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 8:
+      Serial.print(upperFrontPID.GetKp(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPID.GetKi(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPID.GetKd(), 7);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 9:
+      Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
+      Serial.print(F(", "));
+      Serial.print(upperFrontHeater.thermocouple);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPidIo.Output);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPidIo.Setpoint);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 10:
+      upperFrontPID.GetTerms(&pTerm, &iTerm, &dTerm);
+      Serial.print(pTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(iTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(dTerm, 6);
+      Serial.println("");
+      printPhase++;
+      break;
 #endif
 #endif
-  handleRelayWatchdog();
-
-    // stuff for impulse response testing
-//    Serial.println(F("DEBUG, Time, UF DC, UF Temp, UR DC, UR Temp"));
-//    Serial.print(F("DEBUG, "));
-//    Serial.print(millis());
-//    Serial.print(F(", "));
-//    Serial.print(upperFrontPidIo.Output);
-//    Serial.print(F(", "));
-//    Serial.print(intTempCUF);
-//    Serial.print(F(", "));
-//    Serial.print(upperRearPidIo.Output);
-//    Serial.print(F(", "));
-//    Serial.println(intTempCUR);
-    }
+    case 11:
+      printPhase++;
+      break;
+    default:
+      printPhase = 0;
+  }
 }
 
 //------------------------------------------
