@@ -56,7 +56,9 @@ static TcoAndFan tcoAndFan;
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   2
+#define FIRMWARE_BUILD_VERSION   3
+
+const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
 //------------------------------------------
 // Macros for Constants and Pin Definitions
@@ -600,12 +602,15 @@ void handleIncomingCommands(void)
           break;
 
         case 'v': // query protocol version
+        #ifdef KILL
           Serial.print(F("V "));
           Serial.print(FIRMWARE_MAJOR_VERSION);
           Serial.print(F("."));
           Serial.print(FIRMWARE_MINOR_VERSION);
           Serial.print(F(" bugfix "));
           Serial.println(FIRMWARE_BUILD_VERSION);
+          #endif
+          Serial.println(versionString);
           receivedCommandBufferIndex = 0;
           break;
 
