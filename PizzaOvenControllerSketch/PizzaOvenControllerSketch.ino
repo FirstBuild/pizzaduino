@@ -44,6 +44,7 @@
 #include "heater.h"
 #include "cookingStateMachine.h"
 #include "tcoAndFanCheck.h"
+#include <avr/wdt.h>
 
 static TcoAndFan tcoAndFan;
 
@@ -540,6 +541,8 @@ void setup()
   upperRearPID.SetTunings(upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd);
 #endif
 
+  wdt_enable(WDTO_2S);
+
   Serial.println(F("DEBUG Initialization complete."));
 }
 
@@ -919,6 +922,9 @@ void loop()
 {
   bool oldPowerButtonState = powerButtonIsOn();
   bool oldDlbState = sailSwitchIsOn();
+
+  // pet the watchdog
+  wdt_reset();
 
   // Gather inputs and process
   adcReadRun();
