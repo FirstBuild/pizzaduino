@@ -29,3 +29,5 @@
 cscope.files
 tags
 default.vim
+PizzaDuinoTests_tests
+objs/

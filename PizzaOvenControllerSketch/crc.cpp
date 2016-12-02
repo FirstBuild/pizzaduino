@@ -73,7 +73,7 @@ crc_t crc_update(crc_t crc, const unsigned char *data, size_t data_len)
 
     while (data_len--) {
         tbl_idx = ((crc >> 8) ^ *data) & 0xff;
-        crc = (pgm_read_word(&crc_table[tbl_idx]) ^ (crc << 8)) & 0xffff;
+        crc = (pgm_read_word((const uint16_t *)&crc_table[tbl_idx]) ^ (crc << 8)) & 0xffff;
 
         data++;
     }
