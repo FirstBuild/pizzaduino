@@ -478,8 +478,8 @@ void setup()
   cli(); 
   wdt_reset();
 
-  /* Clear WDRF in MCUSR */
-  MCUSR &= ~(1<<WDRF);
+  /* Clear all flags in MCUSR */
+  MCUSR &= ~((1<<WDRF) | (1<<BORF) | (1<<EXTRF) | (1<<PORF) );
   /* Write logical one to WDCE and WDE */
   /* Keep old prescaler setting to prevent unintentional time-out */
   WDTCSR |= (1<<WDCE) | (1<<WDE);
@@ -515,6 +515,19 @@ void setup()
     Serial.println(F("The system restarted due to watchdog timer reset."));
     watchdogResetOccurred = 1;
   }
+  if (mcusrAtStart & (1<<BORF))
+  {
+    Serial.println(F("The system restarted due to brown-out reset."));
+  }
+  if (mcusrAtStart & (1<<EXTRF))
+  {
+    Serial.println(F("The system restarted due to external reset."));
+  }
+  if (mcusrAtStart & (1<<PORF))
+  {
+    Serial.println(F("The system restarted due to power on reset."));
+  }
+
   
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
