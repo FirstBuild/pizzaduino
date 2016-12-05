@@ -126,6 +126,8 @@ PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRe
 
 volatile bool outputTempPeriodic = false;
 
+static uint8_t watchdogResetOccurred = 0;
+
 
 //------------------------------------------
 // Prototypes
@@ -292,6 +294,10 @@ void PeriodicOutputTemps()
       if(tcoAndFan.coolingFanHasFailed())
       {
           Serial.println(F("Cooling fan failure"));      
+      }
+      if (watchdogResetOccurred != 0)
+      {
+          Serial.println(F("Watchdog reset occurred"));      
       }
     
       Serial.print(F("Relays "));
@@ -468,6 +474,18 @@ void readParametersFromMemory(void)
 //------------------------------------------
 void setup()
 {
+  uint8_t mcusrAtStart = MCUSR;
+  cli(); 
+  wdt_reset();
+
+  /* Clear WDRF in MCUSR */
+  MCUSR &= ~(1<<WDRF);
+  /* Write logical one to WDCE and WDE */
+  /* Keep old prescaler setting to prevent unintentional time-out */
+  WDTCSR |= (1<<WDCE) | (1<<WDE);
+  /* Turn off WDT */
+  WDTCSR = 0x00;
+
   pizzaMemoryReturnTypes pizzaMemoryInitResponse;
   uint8_t i;
   uint8_t relaysToInitialize[] = {
@@ -487,9 +505,17 @@ void setup()
     ANALOG_THERMO_LOWER_REAR
   };
 
+  // disable the watchdog timer
+
   Serial.begin(19200);
   Serial.println(F("DEBUG Starting pizza oven..."));
 
+  if (mcusrAtStart & (1<<WDRF))
+  {
+    Serial.println(F("The system restarted due to watchdog timer reset."));
+    watchdogResetOccurred = 1;
+  }
+  
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
   if (pizzaMemoryWasEmpty == pizzaMemoryInitResponse)
@@ -544,6 +570,7 @@ void setup()
   wdt_enable(WDTO_2S);
 
   Serial.println(F("DEBUG Initialization complete."));
+  sei();
 }
 
 #define RECEVIED_COMMAND_BUFFER_LENGTH (16)
