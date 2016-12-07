@@ -25,19 +25,23 @@ CPP_PLATFORM = Gcc
 #CPPUTEST_MEMLEAK_DETECTOR_NEW_MACRO_FILE = -include ApplicationLib/ExamplesNewOverrides.h
 #SRC_DIRS = \
 
-SRC_FILES = PizzaOvenControllerSketch/crc.c \
+SRC_FILES = PizzaOvenControllerSketch/crc.cpp \
+	    PizzaOvenControllerSketch/serialCommWrapper.cpp \
+	    PizzaOvenControllerSketch/ringbuf.cpp
 	    
 TEST_SRC_DIRS = \
 	Tests \
 	Tests/AllTests \
-	Tests/crc
+	Tests/crc \
+	Tests/serialCommWrapper \
+	Tests/ringBuffer
 
 MOCKS_SRC_DIRS = Tests/Mocks \
 
 INCLUDE_DIRS =\
 	Tests/Mocks \
 	PizzaOvenControllerSketch \
-	$(CPPUTEST_HOME)/include\
+	$(CPPUTEST_HOME)/include \
 
 include $(CPPUTEST_HOME)/build/MakefileWorker.mk
 
