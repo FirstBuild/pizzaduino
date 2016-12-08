@@ -164,54 +164,18 @@ static void verifyReceivedPacket(void)
    // end of packet should look like: [0x12,0x34]rn
    uint16_t crcSent;
    
-   if (m_recvBuf[m_recvBufIndex - 13] != '[') 
-   {
-      return;
-   }
-   if (m_recvBuf[m_recvBufIndex - 12] != '0')
-   {
-      return;
-   }
-   if (m_recvBuf[m_recvBufIndex - 11] != 'x')
-   {
-      return;
-   }
-   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 10]))
-   {
-      return;
-   }
-   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 9]))
-   {
-      return;
-   }
-   if (m_recvBuf[m_recvBufIndex - 8] != ',')
-   {
-      return;
-   }
-   if (m_recvBuf[m_recvBufIndex - 7] != '0')
-   {
-      return;
-   }
-   if (m_recvBuf[m_recvBufIndex - 6] != 'x')
-   {
-      return;
-   }
-   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 5]))
-   {
-      return;
-   }
-   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 4]))
-   {
-      return;
-   }
-   if (m_recvBuf[m_recvBufIndex - 3] != ']')
-   {
-      return;
-   }
-   if (m_recvBuf[m_recvBufIndex - 2] != '\r')
-   {
-      return;
-   }
+   if (m_recvBuf[m_recvBufIndex - 13] != '[') return;
+   if (m_recvBuf[m_recvBufIndex - 12] != '0') return;
+   if (m_recvBuf[m_recvBufIndex - 11] != 'x') return;
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 10])) return;
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 9])) return;
+   if (m_recvBuf[m_recvBufIndex - 8] != ',') return;
+   if (m_recvBuf[m_recvBufIndex - 7] != '0') return;
+   if (m_recvBuf[m_recvBufIndex - 6] != 'x') return;
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 5])) return;
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 4])) return;
+   if (m_recvBuf[m_recvBufIndex - 3] != ']') return;
+   if (m_recvBuf[m_recvBufIndex - 2] != '\r') return;
    crcSent = asciiHexByteToNum(&m_recvBuf[m_recvBufIndex - 10]);
    crcSent = (uint16_t)((crcSent<<8) + asciiHexByteToNum(&m_recvBuf[m_recvBufIndex - 5]));
    if (crcSent == m_recvCrcCalced)
