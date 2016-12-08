@@ -252,7 +252,7 @@ void serialCommWrapperSendMessage(uint8_t *pData, uint8_t length)
       return;
    }
 
-   m_sendByte('@');
+   m_sendByte(STX);
 
    // send packet
    for(i=0; i<length; i++) {
