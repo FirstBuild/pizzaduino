@@ -1,8 +1,13 @@
 /*
    serialCommWrapper
   
-   Take an array of bytes, wrap them in a header, add a CRC, and send it out of
-   the serial port.
+   Send and received messages over a serial link.  The messages are in ASCII,
+   not binary.  Messages use the ampersand (@) character as a start of packet
+   character.  The CRC is calculated over the message bytes.  The CRC is
+   appended to the message, is sent MSB first, followed by the LSB, and are
+   sent in ASCII hex.  Each CRC byte is preceded by 0x and include leading
+   zeros.
+
    Receive bytes, looking for a valid wrapped packet.  When a valid packet is
    received, call the registerd callback with the payload.
 
@@ -15,6 +20,31 @@ Usage:
    To run, periodically call serialCommWrapperRun to exercise the state machine.
    Call serialCommWrapperHandleByte when a byte is received on the serial port.
 
+Packet structure:
+   A wrapped packet looks as follows:
+      @put ASCII data here[0xaa,0xbb]\r\n
+
+   The leading ampersand marks the start of the packet.
+   The orginal ASCII message is sent following the ampersand.
+   The CRC is surrounded by square brackets ([]).
+   The CRC bytes are separated by a comman.
+   No spaces appear in the bracketed CRC field.
+   The packet is terminated with a carriage return (\r) and line feed (\n) 
+   pair.
+
+   The message data must be in the range of the printable ASCII characters.
+   Any numbers contained with the message data must be ASCII-encoded by
+   their respective characters.  The interpretation of any data, such as
+   boolean, float, string, hex, decimal, etc, are determined by the sender
+   and receiver of the message data and not by this message protocol.
+
+Reserved Characters:
+   The following are reserved characters and cannot appear in the message data:
+      @ [ ]
+
+   The carriage return and line feed characters also cannot appear in the 
+   message data, but their prohibition is already covered by the fact that they
+   are not ASCII-printable.
   
    Copyright (c) 2015 FirstBuild
 
