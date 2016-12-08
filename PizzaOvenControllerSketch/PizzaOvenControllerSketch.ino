@@ -45,6 +45,7 @@
 #include "cookingStateMachine.h"
 #include "tcoAndFanCheck.h"
 #include <avr/wdt.h>
+#include "serialCommWrapper.h"
 
 static TcoAndFan tcoAndFan;
 
@@ -216,12 +217,23 @@ void AllHeatersOffStateClear()
 
 void outputAcInputStates()
 {
+  //                                     0000000000111111111122222222223
+  //                                     0123456789012345678901234567890
+  const uint8_t PROGMEM msgTemplate[] = "Power 1 L2DLB 1 TCO 1 \r\n";
+  uint8_t msg[30];
+  strcpy_P(msg, msgTemplate);
+  msg[6] = '0' + powerButtonIsOn();
+  msg[14] = '0' + sailSwitchIsOn();
+  msg[20] = '0' + tcoInputIsOn();
+  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  /*
   Serial.print(F("Power "));
   Serial.print(powerButtonIsOn());
   Serial.print(F(" L2DLB "));
   Serial.print(sailSwitchIsOn());
   Serial.print(F(" TCO "));
   Serial.println(tcoInputIsOn());
+  */
 }
 
 void outputDoorStatus()
@@ -469,6 +481,11 @@ void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
 }
 
+static void sendSerialByte(uint8_t b)
+{
+  Serial.write(b);
+}
+
 //------------------------------------------
 // Setup Routine
 //------------------------------------------
@@ -512,22 +529,23 @@ void setup()
 
   if (mcusrAtStart & (1<<WDRF))
   {
-    Serial.println(F("The system restarted due to watchdog timer reset."));
+    Serial.println(F("DEBUG The system restarted due to watchdog timer reset."));
     watchdogResetOccurred = 1;
   }
   if (mcusrAtStart & (1<<BORF))
   {
-    Serial.println(F("The system restarted due to brown-out reset."));
+    Serial.println(F("DEBUG The system restarted due to brown-out reset."));
   }
   if (mcusrAtStart & (1<<EXTRF))
   {
-    Serial.println(F("The system restarted due to external reset."));
+    Serial.println(F("DEBUG The system restarted due to external reset."));
   }
   if (mcusrAtStart & (1<<PORF))
   {
-    Serial.println(F("The system restarted due to power on reset."));
+    Serial.println(F("DEBUG The system restarted due to power on reset."));
   }
 
+  serialCommWrapperInit(sendSerialByte, NULL);
   
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
@@ -645,14 +663,6 @@ void handleIncomingCommands(void)
           break;
 
         case 'v': // query protocol version
-        #ifdef KILL
-          Serial.print(F("V "));
-          Serial.print(FIRMWARE_MAJOR_VERSION);
-          Serial.print(F("."));
-          Serial.print(FIRMWARE_MINOR_VERSION);
-          Serial.print(F(" bugfix "));
-          Serial.println(FIRMWARE_BUILD_VERSION);
-          #endif
           Serial.println(versionString);
           receivedCommandBufferIndex = 0;
           break;

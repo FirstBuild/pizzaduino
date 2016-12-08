@@ -39,6 +39,8 @@ Usage:
 
 #include "serialCommWrapper.h"
 
+#include <stdio.h>
+
 #ifndef MSB_OF_U16
   #define MSB_OF_U16(v) (uint8_t)((v>>8)&0x00ff) 
 #endif
@@ -47,7 +49,7 @@ Usage:
 #endif
 
 enum serialCommWrapperEnum {
-   STX = 0xff,
+   STX = '@',
    ESC = 0xfe
 };
 
@@ -57,199 +59,168 @@ static SerialCommWrapperSendByteFunc m_sendByte = NULL;
 // structures for handling reception
 #define SERIAL_RECEIVE_BUF_SIZE 64
 static uint16_t m_recvCrcCalced;
-static uint16_t m_recvCrcRecvd;
 static uint8_t m_recvBufIndex;
 static uint8_t m_recvBuf[SERIAL_RECEIVE_BUF_SIZE];
-static uint8_t m_recvExpectedDataLength;
+static uint8_t m_dataBytesReceived;
 
 static void waitForStx(uint8_t data);
-static void waitForLength(uint8_t data);
-static void waitForLengthAfterEsc(uint8_t data);
-static void waitForPacketByte(uint8_t data);
-static void waitForPacketByteAfterEsc(uint8_t data);
-static void waitForCrcMsb(uint8_t data);
-static void waitForCrcMsbAfterEsc(uint8_t data);
-static void waitForCrcLsb(uint8_t data);
-static void waitForCrcLsbAfterEsc(uint8_t data);
+static void waitForData(uint8_t data);
+static void waitForLineFeed(uint8_t data);
 typedef void (*ReceiveStateMachineHandler)(uint8_t data);
-ReceiveStateMachineHandler receiveState = waitForStx;
+static ReceiveStateMachineHandler receiveState = waitForStx;
 static void verifyReceivedPacket(void);
 
 static void waitForStx(uint8_t data)
 {
    if (data == STX)
    {
-      receiveState = waitForLength;
+      receiveState = waitForData;
       m_recvBufIndex = 0;
+      m_dataBytesReceived = 0;
       m_recvCrcCalced = (uint16_t)crc_init();
    }
 }
-static void waitForLength(uint8_t data)
+
+static void waitForData(uint8_t data)
 {
-   switch(data)
-   {
-      case ESC:
-         receiveState = waitForLengthAfterEsc;
-         break;
-      case STX:
-         waitForStx(data);
-         break;
-      default:
-         m_recvExpectedDataLength = data;
-         if (m_recvExpectedDataLength > SERIAL_RECEIVE_BUF_SIZE)
-         {
-            receiveState = waitForStx;
-         }
-         else
-         {
-            receiveState = waitForPacketByte;
-         }
+   if (data == STX) {
+      waitForStx(data);
+      return;
    }
-}
-static void waitForLengthAfterEsc(uint8_t data)
-{
-   if (data == ESC || data == STX)
-   {
-      m_recvExpectedDataLength = data;
-      if (m_recvExpectedDataLength > SERIAL_RECEIVE_BUF_SIZE)
-      {
-         receiveState = waitForStx;
-      }
-      else
-      {
-         receiveState = waitForPacketByte;
-      }
-   }
-   else
+   m_recvBuf[m_recvBufIndex++] = data;
+   if (m_recvBufIndex >= SERIAL_RECEIVE_BUF_SIZE)
    {
       receiveState = waitForStx;
    }
-}
-static void acceptReceivedPacketByte(uint8_t data)
-{
-   m_recvBuf[m_recvBufIndex++] = data;
-   m_recvCrcCalced = (uint16_t)crc_update(m_recvCrcCalced, &data, 1);
-   if (m_recvBufIndex >= m_recvExpectedDataLength)
+   else if (data == '[')
    {
-      receiveState = waitForCrcMsb;
+      receiveState = waitForLineFeed;
    }
    else
    {
-      receiveState = waitForPacketByte;
+      m_dataBytesReceived++;
+      m_recvCrcCalced = (uint16_t)crc_update(m_recvCrcCalced, &data, 1);
    }
 }
-static void waitForPacketByte(uint8_t data)
+
+static void waitForLineFeed(uint8_t data)
 {
-   switch(data)
+   if (data == STX) {
+      waitForStx(data);
+      return;
+   }
+   m_recvBuf[m_recvBufIndex++] = data;
+   if (m_recvBufIndex >= SERIAL_RECEIVE_BUF_SIZE)
    {
-      case ESC:
-         receiveState = waitForPacketByteAfterEsc;
-         break;
-      case STX:
-         waitForStx(data);
-         break;
-      default:
-         acceptReceivedPacketByte(data);
+      receiveState = waitForStx;
+   }
+   else if (data == '\n')
+   {
+      verifyReceivedPacket();
+      receiveState = waitForStx;
    }
 }
-static void waitForPacketByteAfterEsc(uint8_t data)
+
+static bool isValidAsciiHexDigit(uint8_t digit)
 {
-   switch(data)
-   {
-      case ESC:
-      case STX:
-         acceptReceivedPacketByte(data);
-         break;
-      default:
-         receiveState = waitForStx;
-   }
+   bool retVal = false;
+
+   if (digit >= '0' && digit <= '9') retVal = true;
+   if (digit >= 'a' && digit <= 'f') retVal = true;
+   if (digit >= 'A' && digit <= 'F') retVal = true;
+
+   return retVal;
 }
-static void waitForCrcMsb(uint8_t data)
+
+static uint8_t asciiHexByteToNum(uint8_t *pBuf)
 {
-   switch(data)
+   uint8_t i;
+   uint8_t val=0;
+   uint8_t base = '0';
+
+
+   for(i=0; i<2; i++)
    {
-      case ESC:
-         receiveState = waitForCrcMsbAfterEsc;
-         break;
-      case STX:
-         waitForStx(data);
-         break;
-      default:
-         m_recvCrcRecvd = (uint16_t)(data << 8);
-         receiveState = waitForCrcLsb;
+      val = (uint8_t)(val << 4);
+      base = '0';
+      if (pBuf[i] >= 'a' && pBuf[i] <= 'f')
+      {
+         base = 'a' - 10;
+      }
+      else if (pBuf[i] >= 'A' && pBuf[i] <= 'F')
+      {
+         base = 'A' - 10;
+      }
+      val = (uint8_t)(val + (pBuf[i] - base));
    }
+
+   return val;
 }
-static void waitForCrcMsbAfterEsc(uint8_t data)
-{
-   switch(data)
-   {
-      case ESC:
-      case STX:
-         m_recvCrcRecvd = (uint16_t)(data << 8);
-         receiveState = waitForCrcLsb;
-         break;
-      default:
-         receiveState = waitForStx;
-   }
-}
-static void waitForCrcLsb(uint8_t data)
-{
-   switch(data)
-   {
-      case ESC:
-         receiveState = waitForCrcLsbAfterEsc;
-         break;
-      case STX:
-         waitForStx(data);
-         break;
-      default:
-         m_recvCrcRecvd = (uint16_t)(m_recvCrcRecvd + data);
-         verifyReceivedPacket();
-         receiveState = waitForStx;
-   }
-}
-static void waitForCrcLsbAfterEsc(uint8_t data)
-{
-   switch(data)
-   {
-      case ESC:
-      case STX:
-         m_recvCrcRecvd = (uint16_t)(m_recvCrcRecvd + data);
-         verifyReceivedPacket();
-         receiveState = waitForStx;
-      default:
-         receiveState = waitForStx;
-   }
-}
+
 static void verifyReceivedPacket(void)
 {
-   if (m_recvCrcRecvd == m_recvCrcCalced)
+   //                           1111111111000000000
+   //                           9876543210987654321
+   // end of packet should look like: [0x12,0x34]rn
+   uint16_t crcSent;
+   
+   if (m_recvBuf[m_recvBufIndex - 13] != '[') 
+   {
+      return;
+   }
+   if (m_recvBuf[m_recvBufIndex - 12] != '0')
+   {
+      return;
+   }
+   if (m_recvBuf[m_recvBufIndex - 11] != 'x')
+   {
+      return;
+   }
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 10]))
+   {
+      return;
+   }
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 9]))
+   {
+      return;
+   }
+   if (m_recvBuf[m_recvBufIndex - 8] != ',')
+   {
+      return;
+   }
+   if (m_recvBuf[m_recvBufIndex - 7] != '0')
+   {
+      return;
+   }
+   if (m_recvBuf[m_recvBufIndex - 6] != 'x')
+   {
+      return;
+   }
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 5]))
+   {
+      return;
+   }
+   if (!isValidAsciiHexDigit(m_recvBuf[m_recvBufIndex - 4]))
+   {
+      return;
+   }
+   if (m_recvBuf[m_recvBufIndex - 3] != ']')
+   {
+      return;
+   }
+   if (m_recvBuf[m_recvBufIndex - 2] != '\r')
+   {
+      return;
+   }
+   crcSent = asciiHexByteToNum(&m_recvBuf[m_recvBufIndex - 10]);
+   crcSent = (uint16_t)((crcSent<<8) + asciiHexByteToNum(&m_recvBuf[m_recvBufIndex - 5]));
+   if (crcSent == m_recvCrcCalced)
    {
       if(m_msgReceivedHandler != NULL)
       {
-         m_msgReceivedHandler(m_recvBuf, m_recvBufIndex);
+         m_msgReceivedHandler(&m_recvBuf[0], m_dataBytesReceived);
       }
    }
-}
-
-static uint8_t isControlChar(uint8_t c) {
-   switch(c) {
-      case STX:
-         return 1;
-      case ESC:
-         return 1;
-      default:
-         return 0;
-   }
-}
-
-static void outputChar(uint8_t c) 
-{
-   if (isControlChar(c)) 
-   {
-      m_sendByte(ESC);
-   }
-   m_sendByte(c);
 }
 
 // initialize the serial comm wrapper
@@ -259,33 +230,54 @@ void serialCommWrapperInit(SerialCommWrapperSendByteFunc sendByte, SerialCommWra
    m_sendByte = sendByte;
 }
 
+static uint8_t valToAsciiDigit(uint8_t val)
+{
+   uint8_t base = 'a' - 10;
+
+   val = val & 0x0f;
+   if (val < 10) base = '0';
+   return (uint8_t)(base + val);
+}
+
+static void byteToStringHex(uint8_t *pBuf, uint8_t val)
+{
+   pBuf[0] = valToAsciiDigit((uint8_t)((val >> 4)&0xf));
+   pBuf[1] = valToAsciiDigit((uint8_t)(val&0xf));
+}
+
 void serialCommWrapperSendMessage(uint8_t *pData, uint8_t length)
 {
    uint16_t crc = (uint16_t)crc_init();
    uint8_t i;
+   //                   000000000011111
+   //                   012345678901234
+   uint8_t crcText[] = "[0x12,0x34]\r\n";
 
    if (m_sendByte == NULL)
    {
       return;
    }
 
-   m_sendByte(STX);
-   outputChar(length);
+   m_sendByte('@');
 
    // send packet
    for(i=0; i<length; i++) {
       crc = (uint16_t)crc_update(crc, &pData[i], 1);
-      outputChar(pData[i]);
+      m_sendByte(pData[i]);
    }
 
    // send crc
-   outputChar(MSB_OF_U16(crc));
-   outputChar(LSB_OF_U16(crc));
+   byteToStringHex(&crcText[3], (uint8_t)(crc>>8));
+   byteToStringHex(&crcText[8], (uint8_t)(crc&0xff));
+   for(i=0; crcText[i]!=0; i++) 
+   {
+      m_sendByte(crcText[i]);
+   }
 }
 
 void serialCommWrapperHandleByte(uint8_t data)
 {
-   (void)data;
+   receiveState(data);
 }
 
 void serialCommWrapperRun(void)

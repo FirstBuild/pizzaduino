@@ -15,6 +15,7 @@ CPPUTEST_CXXFLAGS += -Wno-old-style-cast
 COMPONENT_NAME = PizzaDuinoTests
 CPPUTEST_HOME = ~/source/cpputest
 
+CPPUTEST_USE_GCOV = Y
 
 CPPUTEST_USE_EXTENSIONS = Y
 CPP_PLATFORM = Gcc
