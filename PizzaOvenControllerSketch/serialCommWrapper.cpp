@@ -193,7 +193,7 @@ static void verifyReceivedPacket(void)
    //                           9876543210987654321
    // end of packet should look like: [0x12,0x34]rn
    uint16_t crcSent;
-   
+
    if (m_recvBuf[m_recvBufIndex - 13] != '[') return;
    if (m_recvBuf[m_recvBufIndex - 12] != '0') return;
    if (m_recvBuf[m_recvBufIndex - 11] != 'x') return;

@@ -28,14 +28,16 @@ CPP_PLATFORM = Gcc
 
 SRC_FILES = PizzaOvenControllerSketch/crc.cpp \
 	    PizzaOvenControllerSketch/serialCommWrapper.cpp \
-	    PizzaOvenControllerSketch/ringbuf.cpp
+	    PizzaOvenControllerSketch/ringbuf.cpp \
+	    PizzaOvenControllerSketch/ftoa.cpp
 	    
 TEST_SRC_DIRS = \
 	Tests \
 	Tests/AllTests \
 	Tests/crc \
 	Tests/serialCommWrapper \
-	Tests/ringBuffer
+	Tests/ringBuffer \
+	Tests/ftoa
 
 MOCKS_SRC_DIRS = Tests/Mocks \
 

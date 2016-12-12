@@ -46,6 +46,7 @@
 #include "tcoAndFanCheck.h"
 #include <avr/wdt.h>
 #include "serialCommWrapper.h"
+#include "ftoa.h"
 
 static TcoAndFan tcoAndFan;
 
@@ -133,14 +134,15 @@ static uint8_t watchdogResetOccurred = 0;
 //------------------------------------------
 // Prototypes
 //------------------------------------------
-void ConvertHeaterPercentCounts();
+void ConvertHeaterPercentCounts(void);
 void readThermocouples(void);
-void PeriodicOutputTemps();
+void PeriodicOutputInfo(void);
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
 float GetFloatInputValue(float *pValue, uint8_t *pBuf);
-void HeaterTimerInterrupt();
+void HeaterTimerInterrupt(void);
 void saveParametersToMemory(void);
 void readParametersFromMemory(void);
+static void handleIncomingMessage(uint8_t *pData, uint8_t length);
 
 void readThermocouples(void)
 {
@@ -176,7 +178,7 @@ void readThermocouples(void)
 // Code
 //------------------------------------------
 
-void ConvertHeaterPercentCounts()
+void ConvertHeaterPercentCounts(void)
 {
   upperFrontHeater.heaterCountsOn  = (((uint32_t)upperFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
   upperFrontHeater.heaterCountsOff = (((uint32_t)upperFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
@@ -191,7 +193,7 @@ void ConvertHeaterPercentCounts()
   lowerRearHeater.heaterCountsOff  = (((uint32_t)lowerRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 }
 
-void UpdateHeaterHardware()
+void UpdateHeaterHardware(void)
 {
   changeRelayState(HEATER_TRIAC_UPPER_FRONT, upperFrontHeater.relayState);
   changeRelayState(HEATER_TRIAC_UPPER_REAR, upperRearHeater.relayState);
@@ -199,7 +201,7 @@ void UpdateHeaterHardware()
   changeRelayState(HEATER_RELAY_LOWER_REAR, lowerRearHeater.relayState);
 }
 
-void AllHeatersOffStateClear()
+void AllHeatersOffStateClear(void)
 {
 	uint8_t i;
 
@@ -215,38 +217,162 @@ void AllHeatersOffStateClear()
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOff);
 }
 
-void outputAcInputStates()
+void outputAcInputStates(void)
 {
-  //                                     0000000000111111111122222222223
-  //                                     0123456789012345678901234567890
-  const uint8_t PROGMEM msgTemplate[] = "Power 1 L2DLB 1 TCO 1 \r\n";
-  uint8_t msg[30];
-  strcpy_P(msg, msgTemplate);
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgTemplate[] PROGMEM = "Power 7 L2DLB 8 TCO 9";
+  uint8_t msg[25];
+  strcpy_P(&msg[0], &msgTemplate[0]);
   msg[6] = '0' + powerButtonIsOn();
   msg[14] = '0' + sailSwitchIsOn();
   msg[20] = '0' + tcoInputIsOn();
   serialCommWrapperSendMessage(&msg[0], strlen(msg));
-  /*
-  Serial.print(F("Power "));
-  Serial.print(powerButtonIsOn());
-  Serial.print(F(" L2DLB "));
-  Serial.print(sailSwitchIsOn());
-  Serial.print(F(" TCO "));
-  Serial.println(tcoInputIsOn());
-  */
 }
 
-void outputDoorStatus()
+void outputDoorStatus(void)
 {
-  Serial.print(F("Door "));
-  Serial.print(doorInput.IsActive() ? 1 : 0);
-  Serial.print(F(" Count "));
-  Serial.println(doorDeployCount);
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgTemplate[] PROGMEM = "Door 7 Count 65535";
+  uint8_t msg[22];
+  strcpy_P(&msg[0], &msgTemplate[0]);
+  msg[5] = '0' + (doorInput.IsActive() ? 1 : 0);
+  itoa(doorDeployCount, &msg[13], 10);
+  serialCommWrapperSendMessage(&msg[0], strlen(msg));
 }
 
-void PeriodicOutputTemps()
+void outputTemps(void)
 {
   uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
+  // 0000000000111111111122222222223
+  // 0123456789012345678901234567890
+  // Temps 1111 2222 3333 4444
+  uint8_t msg[30];
+  uint8_t buf[7];
+
+  intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
+  intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
+  intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
+  intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
+  
+  msg[0] = 0;
+  strcat(msg, "Temps ");
+  itoa(intTempCUF, buf, 10);
+  strcat(msg, buf);
+  strcat(msg, " ");
+  itoa(intTempCUR, buf, 10);
+  strcat(msg, buf);
+  strcat(msg, " ");
+  itoa(intTempCLF, buf, 10);
+  strcat(msg, buf);
+  strcat(msg, " ");
+  itoa(intTempCLR, buf, 10);
+  strcat(msg, buf);
+  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+}
+
+void outputCookingState(void)
+{
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgStandby[]  PROGMEM = "State Standby";
+  static const uint8_t msgDlb[]      PROGMEM = "State DLB";
+  static const uint8_t msgCooking[]  PROGMEM = "State Cooking";
+  static const uint8_t msgCooldown[] PROGMEM = "State Cooldown";
+  uint8_t msg[20];
+  switch (getCookingState())
+  {
+    case cookingStandby:
+      strcpy_P(msg, msgStandby);
+      break;
+    case cookingWaitForDlb:
+      strcpy_P(msg, msgDlb);
+      break;
+    case cookingCooking:
+      strcpy_P(msg, msgCooking);
+      break;
+    case cookingCooldown:
+      strcpy_P(msg, msgCooldown);
+      break;
+  }
+  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+}
+
+void outputFailures(void)
+{
+  //                                                     0000000000111111111122222222223
+  //                                                     0123456789012345678901234567890
+  static const uint8_t msgWatchdogReset[]     PROGMEM = "Watchdog reset occurred";
+  static const uint8_t msgTcoFailure[]        PROGMEM = "TCO failure";
+  static const uint8_t msgCoolingFanFailure[] PROGMEM = "Cooling fan failure";
+  uint8_t msg[27];
+  
+  if(tcoAndFan.tcoHasFailed())
+  {
+    strcpy_P(msg, msgTcoFailure);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }
+  if(tcoAndFan.coolingFanHasFailed())
+  {
+    strcpy_P(msg, msgCoolingFanFailure);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }
+  if (watchdogResetOccurred != 0)
+  {
+    strcpy_P(msg, msgWatchdogReset);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }  
+}
+
+void outputRelayStates(void)
+{
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgTemplate[] PROGMEM = "Relays 1 2 3 4";
+  uint8_t msg[18];
+  strcpy_P(&msg[0], &msgTemplate[0]);
+  msg[7] = '0' + digitalRead(HEATER_TRIAC_UPPER_FRONT);
+  msg[9] = '0' + digitalRead(HEATER_TRIAC_UPPER_REAR);
+  msg[11] = '0' + digitalRead(HEATER_RELAY_LOWER_FRONT);
+  msg[13] = '0' + digitalRead(HEATER_RELAY_LOWER_REAR);
+  
+  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+}
+
+void outputPidDutyCycles(void)
+{
+  // 0000000000111111111122222222223
+  // 0123456789012345678901234567890
+  // PidDC 100.0000000 100.0000000
+  uint8_t msg[35];
+  strcpy(msg, "PidDC ");
+  ftoa(upperFrontPidIo.Output, &msg[strlen(msg)], 7);
+  strcat(msg, " ");
+  ftoa(upperRearPidIo.Output, &msg[strlen(msg)], 7);
+  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+}
+
+void outputTimeInfo(void)
+{
+  // 00000000001111111111222222222233333333334
+  // 01234567890123456789012345678901234567890
+  // Time: 4294967295, thresh: 4294967295
+  uint8_t msg[45];
+  uint8_t buf[15];
+  
+  msg[0] = 0;
+  strcat(msg, "Time: ");
+  ultoa(relayTimeBase, buf, 10);
+  strcat(msg, buf);
+  strcat(msg, ", thresh: ");
+  ultoa(lowerRearHeater.heaterCountsOn, buf, 10);
+  strcat(msg, buf);
+  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+}
+
+void PeriodicOutputInfo()
+{
   static uint8_t printPhase = 0;
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
@@ -255,11 +381,6 @@ void PeriodicOutputTemps()
     double dTerm;
 #endif
 #endif
-
-  intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
-  intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
-  intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
-  intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
 
   switch (printPhase)
   {
@@ -271,64 +392,14 @@ void PeriodicOutputTemps()
       }
       break;
     case 1:
-      Serial.print(F("Temps "));
-      Serial.print(intTempCUF);
-      Serial.print(F(" "));
-      Serial.print(intTempCUR);
-      Serial.print(F(" "));
-      Serial.print(intTempCLF);
-      Serial.print(F(" "));
-      Serial.println(intTempCLR);
-  
+      outputTemps();
       outputAcInputStates();
       outputDoorStatus();
-    
-      switch (getCookingState())
-      {
-        case cookingStandby:
-          Serial.println(F("State Standby"));
-          break;
-        case cookingWaitForDlb:
-          Serial.println(F("State DLB"));
-          break;
-        case cookingCooking:
-          Serial.println(F("State Cooking"));
-          break;
-        case cookingCooldown:
-          Serial.println(F("State Cooldown"));
-          break;
-      }
-    
-      if(tcoAndFan.tcoHasFailed())
-      {
-          Serial.println(F("TCO failure"));      
-      }
-      if(tcoAndFan.coolingFanHasFailed())
-      {
-          Serial.println(F("Cooling fan failure"));      
-      }
-      if (watchdogResetOccurred != 0)
-      {
-          Serial.println(F("Watchdog reset occurred"));      
-      }
-    
-      Serial.print(F("Relays "));
-      Serial.print(digitalRead(HEATER_TRIAC_UPPER_FRONT));
-      Serial.print(F(" "));
-      Serial.print(digitalRead(HEATER_TRIAC_UPPER_REAR));
-      Serial.print(F(" "));
-      Serial.print(digitalRead(HEATER_RELAY_LOWER_FRONT));
-      Serial.print(F(" "));
-      Serial.println(digitalRead(HEATER_RELAY_LOWER_REAR));
-      Serial.print(F("PidDC "));
-      Serial.print(upperFrontPidIo.Output, 7);
-      Serial.print(F(" "));
-      Serial.println(upperRearPidIo.Output, 7);
-  
-      Serial.print("Time: ");
-      Serial.print(relayTimeBase);
-      Serial.print(", thresh: ");
-      Serial.println(lowerRearHeater.heaterCountsOn);
+      outputCookingState();
+      outputFailures();
+      outputRelayStates();
+      outputPidDutyCycles();
+      outputTimeInfo();
       printPhase++;
     break;
     
@@ -545,7 +616,8 @@ void setup()
     Serial.println(F("DEBUG The system restarted due to power on reset."));
   }
 
-  serialCommWrapperInit(sendSerialByte, NULL);
+  serialCommWrapperInit(sendSerialByte, handleIncomingMessage);
+  handleIncomingMessage("v", 1);
   
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
@@ -614,25 +686,31 @@ void setup()
    G - get the pid gains
    l - set lower temp limit
    n - set on percent
-   p - print heater parameters
+   p - get heater parameters
    q - stop oven
    s - start oven
    t - set time base
-   v - query firmware version
+   v - get firmware version
    u - set upper temp limit
 
 */
-void handleIncomingCommands(void)
+static void handleIncomingMessage(uint8_t *pData, uint8_t length)
 {
-  static uint8_t receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
-  static uint8_t receivedCommandBufferIndex = 0;
+  uint8_t receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
+  uint8_t receivedCommandBufferIndex = 0;
   uint8_t lastByteReceived;
   PID *pPid = NULL;
   uint8_t heaterIndex;
+  uint8_t * pText;
+  // Messages
+  // 0000000001111111111222222222233333333334444444444555555555566666666667
+  // 1234567890123456789012345678901234567890123456789012345678901234567890
+  // @nTimes 12345 12345[0xaa,0xbb]rn
 
-  if (Serial.available() > 0)
+  while (length > 0)
   {
-    lastByteReceived = Serial.read();
+    lastByteReceived = *pData++;
+    length--;
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
     //    Serial.print("DEBUG Char rcvd: [");
     //    Serial.print(lastByteReceived);
@@ -663,7 +741,7 @@ void handleIncomingCommands(void)
           break;
 
         case 'v': // query protocol version
-          Serial.println(versionString);
+          serialCommWrapperSendMessage(versionString, strlen(versionString));
           receivedCommandBufferIndex = 0;
           break;
 
@@ -673,22 +751,24 @@ void handleIncomingCommands(void)
             switch (receivedCommandBuffer[1])
             {
               case '0' :
-                Serial.print(F("nTimes "));
-                Serial.print(triacPeriodSeconds);
-                Serial.print(" ");
-                Serial.println(relayPeriodSeconds);
+                static const uint8_t nTimesText[] PROGMEM = "nTimes ";
+                printMessageWithTwoUints(nTimesText, triacPeriodSeconds, relayPeriodSeconds); 
                 break;
               case '1' :
-                printHeaterTemperatureParameters("UF ", upperFrontHeater.parameter.parameterArray);
+                static const uint8_t ufText[] PROGMEM = "UF ";
+                printHeaterTemperatureParameters(ufText, upperFrontHeater.parameter.parameterArray);
                 break;
               case '2' :
-                printHeaterTemperatureParameters("UR ", upperRearHeater.parameter.parameterArray);
+                static const uint8_t urText[] PROGMEM = "UR ";
+                printHeaterTemperatureParameters(urText, upperRearHeater.parameter.parameterArray);
                 break;
               case '3' :
-                printHeaterTemperatureParameters("LF ", lowerFrontHeater.parameter.parameterArray);
+                static const uint8_t lfText[] PROGMEM = "LF ";
+                printHeaterTemperatureParameters(lfText, lowerFrontHeater.parameter.parameterArray);
                 break;
               case '4' :
-                printHeaterTemperatureParameters("LR ", lowerRearHeater.parameter.parameterArray);
+                static const uint8_t lrText[] PROGMEM = "LR ";
+                printHeaterTemperatureParameters(lrText, lowerRearHeater.parameter.parameterArray);
                 break;
               default:
                 Serial.print(F("DEBUG unknown command received for the 'p' command: "));
@@ -896,17 +976,19 @@ void handleIncomingCommands(void)
           break;
 
         case 'G': // query PID parameters
-
+          static const uint8_t ufgText[] PROGMEM = "UFG ";
+          static const uint8_t urgText[] PROGMEM = "URG ";
+          
           if (receivedCommandBufferIndex >= 2)
           {
             switch (receivedCommandBuffer[1])
             {
               case '1' :
-                Serial.print(F("UFG "));
+                pText = ufgText;
                 pPid = &upperFrontPID;
                 break;
               case '2' :
-                Serial.print(F("URG "));
+                pText = urgText;
                 pPid = &upperRearPID;
                 break;
               default:
@@ -917,13 +999,7 @@ void handleIncomingCommands(void)
 
             if (pPid != NULL)
             {
-
-              Serial.print(pPid->GetKp(), 7);
-              Serial.print(F(" "));
-              Serial.print(pPid->GetKi(), 7);
-              Serial.print(F(" "));
-              Serial.print(pPid->GetKd(), 7);
-              Serial.println(F(" "));
+              printPidGains(pText, pPid);
             }
 
             receivedCommandBufferIndex = 0;
@@ -980,7 +1056,10 @@ void loop()
   adcReadRun();
   acInputsRun();
   readThermocouples();
-  handleIncomingCommands();
+  if (Serial.available() > 0)
+  {
+    serialCommWrapperHandleByte(Serial.read());
+  }
   updateDcInputs();
 
   // handle door status
@@ -1005,7 +1084,7 @@ void loop()
   boostEnable(relayBoostRun);
   relayDriverRun();
 
-  PeriodicOutputTemps();
+  PeriodicOutputInfo();
   handleRelayWatchdog();
 
   // PID
