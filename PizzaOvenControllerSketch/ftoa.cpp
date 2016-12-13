@@ -3,8 +3,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#ifndef itoa
-#define itoa(val, buf, base) sprintf(buf, "%d", val)
+#ifdef KILL
+#ifndef ultoa
+#error ultoa was not defined
+#define ultoa(val, buf, base) sprintf(buf, "%d", val)
+#endif
 #endif
 
 void ftoa(double val, uint8_t *pBuf, uint8_t precision)

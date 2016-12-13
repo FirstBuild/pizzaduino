@@ -92,7 +92,7 @@ TEST(SerialCommWrapper, testRecv_HappyPath)
    uint8_t msg[] = "123456789";
    uint8_t frame[] = "@123456789[0x29,0xb1]\r\n";
 
-   mock().expectOneCall("messageReceivedHandler").withParameter("length", 9);
+   mock().expectOneCall("messageReceivedHandler").withParameter("length", 11);
    for (i=0; i<sizeof(frame); i++)
    {
       serialCommWrapperHandleByte(frame[i]);
@@ -106,7 +106,7 @@ TEST(SerialCommWrapper, testRecv_HappyPathWithUpperCaseCrc)
    uint8_t msg[] = "123456789";
    uint8_t frame[] = "@123456789[0x29,0xB1]\r\n";
 
-   mock().expectOneCall("messageReceivedHandler").withParameter("length", 9);
+   mock().expectOneCall("messageReceivedHandler").withParameter("length", 11);
    for (i=0; i<sizeof(frame); i++)
    {
       serialCommWrapperHandleByte(frame[i]);
@@ -130,7 +130,7 @@ TEST(SerialCommWrapper, testRecv_CallHappensIfDataIsShort)
 {
    uint16_t bytesToSend = 16;
 
-   mock().expectOneCall("messageReceivedHandler").withParameter("length", bytesToSend);
+   mock().expectOneCall("messageReceivedHandler").withParameter("length", bytesToSend+2);
    whenNBytesAreReceived(bytesToSend);
 }
 
@@ -148,7 +148,7 @@ TEST(SerialCommWrapper, testRecv_PartialPacketDiscardedAndGoodPacketReceived)
    uint8_t msg[] = "123456789";
    uint8_t frame[] = "@12345@123456789[0x29,0xb1]\r\n";
 
-   mock().expectOneCall("messageReceivedHandler").withParameter("length", 9);
+   mock().expectOneCall("messageReceivedHandler").withParameter("length", 11);
    for (i=0; i<sizeof(frame); i++)
    {
       serialCommWrapperHandleByte(frame[i]);
@@ -162,7 +162,7 @@ TEST(SerialCommWrapper, testRecv_PacketRestartedAfterDataReceived)
    uint8_t msg[] = "123456789";
    uint8_t frame[] = "@123456789[0x29,@123456789[0x29,0xb1]\r\n";
 
-   mock().expectOneCall("messageReceivedHandler").withParameter("length", 9);
+   mock().expectOneCall("messageReceivedHandler").withParameter("length", 11);
    for (i=0; i<sizeof(frame); i++)
    {
       serialCommWrapperHandleByte(frame[i]);

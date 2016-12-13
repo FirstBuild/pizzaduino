@@ -68,6 +68,7 @@ Reserved Characters:
    */
 
 #include "serialCommWrapper.h"
+#include <Arduino.h>
 
 #include <stdio.h>
 
@@ -212,7 +213,12 @@ static void verifyReceivedPacket(void)
    {
       if(m_msgReceivedHandler != NULL)
       {
-         m_msgReceivedHandler(&m_recvBuf[0], m_dataBytesReceived);
+        // Tack on a CRLF and adjust the byte count
+        m_recvBuf[m_recvBufIndex - 13] = '\r';
+        m_recvBuf[m_recvBufIndex - 12] = '\n';
+        m_recvBuf[m_recvBufIndex - 11] = 0;
+        m_dataBytesReceived = (uint8_t)(m_dataBytesReceived + 2);
+        m_msgReceivedHandler(&m_recvBuf[0], m_dataBytesReceived);
       }
    }
 }
