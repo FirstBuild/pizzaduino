@@ -38,8 +38,5 @@ cookingState getCookingState(void);
 void requestPizzaOvenStart(void);
 void requestPizzaOvenStop(void);
 
-bool coolingFanHasFailed(void);
-bool tcoHasFailed(void);
-
 #endif // COOKING_STATE_MACHINE_H
  

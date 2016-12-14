@@ -39,6 +39,10 @@ typedef struct MemoryStore
   PidParameters upperRearPidParameters;
   uint16_t doorDeployCount;
   bool doorHasDeployed;
+  uint16_t ufTcLimitExceededCount;
+  uint16_t urTcLimitExceededCount;
+  uint16_t lfTcLimitExceededCount;
+  uint16_t lrTcLimitExceededCount;
 } MemoryStore;
 
 enum pizzaMemoryReturnTypes

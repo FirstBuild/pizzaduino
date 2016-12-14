@@ -8,19 +8,11 @@
 #include "pinDefinitions.h"
 #include "PID_v1.h"
 #include "tcoAndFanCheck.h"
+#include "globals.h"
 
 static bool pizzaOvenStartRequested = false;
 static bool pizzaOvenStopRequested = false;
 static TcoAndFan tcoAndFan;
-
-// Externed globals...sniff
-extern Heater upperFrontHeater;
-extern Heater upperRearHeater;
-extern Heater  lowerFrontHeater;
-extern Heater lowerRearHeater;
-extern volatile uint32_t triacTimeBase;
-extern volatile uint32_t relayTimeBase;
-extern bool doorHasDeployed;
 
 #ifdef USE_PID
 // PID stuff
@@ -117,7 +109,7 @@ static void stateStandbyUpdate()
   AllHeatersOffStateClear();
   if (!tcoAndFan.coolingFanHasFailed() && !tcoAndFan.tcoHasFailed() && !doorHasDeployed)
   {
-    if (powerButtonIsOn() && pizzaOvenStartRequested)
+    if (powerButtonIsOn() && pizzaOvenStartRequested && ALL_TCS_OK)
     {
       poStateMachine.transitionTo(stateWaitForDlb);
     }
@@ -158,7 +150,7 @@ static void stateWaitForDlbUpdate(void)
   {
     poStateMachine.transitionTo(stateStandby);    
   }
-  else if (!powerButtonIsOn() || pizzaOvenStopRequested)
+  else if (!powerButtonIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED)
   {
     pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
@@ -277,7 +269,7 @@ static void stateHeatCycleUpdate()
     oldRelayTimerCounter = currentRelayTimerCounter;
   }
 
-  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested)
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED)
   {
     pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
@@ -327,7 +319,7 @@ static void stateCoolDownUpdate()
     CoolingFanControl(coolingFanOff);
     poStateMachine.transitionTo(stateStandby);
   }
-  else if (powerButtonIsOn() && pizzaOvenStartRequested)
+  else if (powerButtonIsOn() && pizzaOvenStartRequested && ALL_TCS_OK)
   {
     pizzaOvenStartRequested = false;
     poStateMachine.transitionTo(stateWaitForDlb);

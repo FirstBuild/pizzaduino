@@ -1,14 +1,18 @@
 #include <stdint.h>
 #include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
+#include "ftoa.h"
 
-#ifdef KILL
-#ifndef ultoa
-#error ultoa was not defined
-#define ultoa(val, buf, base) sprintf(buf, "%d", val)
-#endif
-#endif
+/*
+char *ultoa(unsigned long val, char *buf, int radix) __attribute__((weak));
+
+char *ultoa(unsigned long val, char *buf, int radix)
+{
+   (void)radix;
+   sprintf(buf, "%lu", val);
+   return buf;
+}
+*/
 
 void ftoa(double val, uint8_t *pBuf, uint8_t precision)
 {

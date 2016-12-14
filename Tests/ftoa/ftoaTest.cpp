@@ -1,17 +1,18 @@
 #include "CppUTest/TestHarness.h"
 #include "CppUTestExt/MockSupport.h"
-#include <stdint.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
-#include <string>
-#include <cstring>
-//#include <iostream>
 
 using namespace std;
 
 #include "ftoa.h"
+
+char *ultoa(unsigned long val, char *buf, int radix)
+{
+   (void)radix;
+   sprintf(buf, "%lu", val);
+   return buf;
+}
 
 TEST_GROUP(ftoaTests)
 {

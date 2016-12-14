@@ -47,8 +47,13 @@
 #include <avr/wdt.h>
 #include "serialCommWrapper.h"
 #include "ftoa.h"
+#include "tcLimitCheck.h"
 
 static TcoAndFan tcoAndFan;
+static TcLimitCheck ufTcLimit(1400, 30000);
+static TcLimitCheck urTcLimit(1400, 30000);
+static TcLimitCheck lfTcLimit(1000, 0);
+static TcLimitCheck lrTcLimit(1000, 0);
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffff)
@@ -91,7 +96,14 @@ uint16_t doorDeployCount = 0;
 bool doorHasDeployed = false;
 DigitalInputDebounced doorInput(DOOR_STATUS_INPUT, false, true);
 
-static bool TCsHaveBeenInitialized = false;
+bool ufTcTempLimitFailed = false;
+uint16_t ufTcLimitExceededCount = 0;
+bool urTcTempLimitFailed = false;
+uint16_t urTcLimitExceededCount = 0;
+bool lfTcTempLimitFailed = false;
+uint16_t lfTcLimitExceededCount = 0;
+bool lrTcTempLimitFailed = false;
+uint16_t lrTcLimitExceededCount = 0;
 
 Heater upperFrontHeater = {{true, 1200, 1300,   0,  100}, 0, 0, relayStateOff, false, 0.0};
 Heater upperRearHeater  = {{true, 1100, 1200,  0, 100}, 0, 0, relayStateOff, false, 0};
@@ -143,6 +155,7 @@ void HeaterTimerInterrupt(void);
 void saveParametersToMemory(void);
 void readParametersFromMemory(void);
 static void handleIncomingMessage(uint8_t *pData, uint8_t length);
+bool needSave = false;
 
 void readThermocouples(void)
 {
@@ -171,7 +184,53 @@ void readThermocouples(void)
   upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
   lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
   lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
-  TCsHaveBeenInitialized = true;
+
+return;
+  ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
+  urTcLimit.checkLimit(upperRearHeater.thermocouple);
+  lfTcLimit.checkLimit(lowerFrontHeater.thermocouple);
+  lrTcLimit.checkLimit(lowerRearHeater.thermocouple);
+
+  if (ufTcLimit.limitExceeded())
+  {
+    if (ufTcTempLimitFailed == false)
+    {
+      ufTcTempLimitFailed = true;
+      ufTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (urTcLimit.limitExceeded())
+  {
+    if (urTcTempLimitFailed == false)
+    {
+      urTcTempLimitFailed = true;
+      urTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (lfTcLimit.limitExceeded())
+  {
+    if (lfTcTempLimitFailed == false)
+    {
+      lfTcTempLimitFailed = true;
+      lfTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (lrTcLimit.limitExceeded())
+  {
+    if (lrTcTempLimitFailed == false)
+    {
+      lrTcTempLimitFailed = true;
+      lrTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (needSave)
+  {
+    saveParametersToMemory(); 
+  }
 }
 
 //------------------------------------------
@@ -301,11 +360,15 @@ void outputCookingState(void)
 
 void outputFailures(void)
 {
-  //                                                     0000000000111111111122222222223
-  //                                                     0123456789012345678901234567890
-  static const uint8_t msgWatchdogReset[]     PROGMEM = "Watchdog reset occurred";
-  static const uint8_t msgTcoFailure[]        PROGMEM = "TCO failure";
-  static const uint8_t msgCoolingFanFailure[] PROGMEM = "Cooling fan failure";
+  //                                                       0000000000111111111122222222223
+  //                                                       0123456789012345678901234567890
+  static const uint8_t msgWatchdogReset[]       PROGMEM = "Watchdog reset occurred";
+  static const uint8_t msgTcoFailure[]          PROGMEM = "TCO failure";
+  static const uint8_t msgCoolingFanFailure[]   PROGMEM = "Cooling fan failure";
+  static const uint8_t msgUfTcOvertempFailure[] PROGMEM = "UF TC over temp failure";
+  static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "UR TC over temp failure";
+  static const uint8_t msgLfTcOvertempFailure[] PROGMEM = "LF TC over temp failure";
+  static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "LR TC over temp failure";
   uint8_t msg[27];
   
   if(tcoAndFan.tcoHasFailed())
@@ -321,6 +384,30 @@ void outputFailures(void)
   if (watchdogResetOccurred != 0)
   {
     strcpy_P(msg, msgWatchdogReset);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }  
+  return;
+  if (ufTcTempLimitFailed != 0)
+  {
+    strcpy_P(msg, msgUfTcOvertempFailure);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }  
+  
+  if (urTcTempLimitFailed != 0)
+  {
+    strcpy_P(msg, msgUrTcOvertempFailure);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }  
+  
+  if (lfTcTempLimitFailed != 0)
+  {
+    strcpy_P(msg, msgLfTcOvertempFailure);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }  
+  
+  if (lrTcTempLimitFailed != 0)
+  {
+    strcpy_P(msg, msgLrTcOvertempFailure);
     serialCommWrapperSendMessage(msg, strlen(msg));  
   }  
 }
@@ -535,6 +622,10 @@ void saveParametersToMemory(void)
 #endif
   pizzaMemoryWrite((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
   pizzaMemoryWrite((uint8_t*)&doorHasDeployed, offsetof(MemoryStore, doorHasDeployed), sizeof(doorHasDeployed));
+  pizzaMemoryWrite((uint8_t*)&ufTcLimitExceededCount, offsetof(MemoryStore, ufTcLimitExceededCount), sizeof(ufTcLimitExceededCount));
+  pizzaMemoryWrite((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
+  pizzaMemoryWrite((uint8_t*)&lfTcLimitExceededCount, offsetof(MemoryStore, lfTcLimitExceededCount), sizeof(lfTcLimitExceededCount));
+  pizzaMemoryWrite((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
 }
 
 void readParametersFromMemory(void)
@@ -550,6 +641,10 @@ void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&upperRearPidIo.pidParameters, offsetof(MemoryStore, upperRearPidParameters), sizeof(PidParameters));
 #endif
   pizzaMemoryRead((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
+  pizzaMemoryRead((uint8_t*)&ufTcLimitExceededCount, offsetof(MemoryStore, ufTcLimitExceededCount), sizeof(ufTcLimitExceededCount));
+  pizzaMemoryRead((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
+  pizzaMemoryRead((uint8_t*)&lfTcLimitExceededCount, offsetof(MemoryStore, lfTcLimitExceededCount), sizeof(lfTcLimitExceededCount));
+  pizzaMemoryRead((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
 }
 
 static void sendSerialByte(uint8_t b)

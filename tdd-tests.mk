@@ -29,7 +29,8 @@ CPP_PLATFORM = Gcc
 SRC_FILES = PizzaOvenControllerSketch/crc.cpp \
 	    PizzaOvenControllerSketch/serialCommWrapper.cpp \
 	    PizzaOvenControllerSketch/ringbuf.cpp \
-	    PizzaOvenControllerSketch/ftoa.cpp
+	    PizzaOvenControllerSketch/ftoa.cpp \
+	    PizzaOvenControllerSketch/tcLimitCheck.cpp \
 	    
 TEST_SRC_DIRS = \
 	Tests \
@@ -37,7 +38,8 @@ TEST_SRC_DIRS = \
 	Tests/crc \
 	Tests/serialCommWrapper \
 	Tests/ringBuffer \
-	Tests/ftoa
+	Tests/ftoa \
+	Tests/tcLimits \
 
 MOCKS_SRC_DIRS = Tests/Mocks \
 
