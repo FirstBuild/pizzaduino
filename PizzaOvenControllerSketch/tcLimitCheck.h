@@ -8,7 +8,7 @@ class TcLimitCheck {
       TcLimitCheck(double limit, uint32_t timeout);
       void checkLimit(double value);
       bool limitExceeded(void);
-   private:
+   //private:
       double m_limit;
       uint32_t m_timeout;
       uint32_t m_startTime;

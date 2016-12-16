@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "ftoa.h"
+#include <Arduino.h>
 
 /*
 char *ultoa(unsigned long val, char *buf, int radix) __attribute__((weak));
@@ -29,7 +30,6 @@ void ftoa(double val, uint8_t *pBuf, uint8_t precision)
       pBuf[1] = 0;
       val = -val;
    }
-
    for(i=0; i<precision; i++)
    {
       rounding /= 10.0;

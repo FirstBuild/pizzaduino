@@ -1,4 +1,4 @@
-    /*
+/*
   Copyright (c) 2015 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -185,7 +185,6 @@ void readThermocouples(void)
   lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
   lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
 
-return;
   ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
   urTcLimit.checkLimit(upperRearHeater.thermocouple);
   lfTcLimit.checkLimit(lowerFrontHeater.thermocouple);
@@ -386,7 +385,6 @@ void outputFailures(void)
     strcpy_P(msg, msgWatchdogReset);
     serialCommWrapperSendMessage(msg, strlen(msg));  
   }  
-  return;
   if (ufTcTempLimitFailed != 0)
   {
     strcpy_P(msg, msgUfTcOvertempFailure);
@@ -410,6 +408,16 @@ void outputFailures(void)
     strcpy_P(msg, msgLrTcOvertempFailure);
     serialCommWrapperSendMessage(msg, strlen(msg));  
   }  
+
+  Serial.print("UR limit: ");
+  Serial.println(ufTcLimit.m_limit);
+  blah blah blah
+        double m_limit;
+      uint32_t m_timeout;
+      uint32_t m_startTime;
+      bool m_timerStarted;
+      bool m_limitFailure;
+};
 }
 
 void outputRelayStates(void)
@@ -434,7 +442,8 @@ void outputPidDutyCycles(void)
   // PidDC 100.0000000 100.0000000
   uint8_t msg[35];
   strcpy(msg, "PidDC ");
-  ftoa(upperFrontPidIo.Output, &msg[strlen(msg)], 7);
+//  ftoa(upperFrontPidIo.Output, &msg[strlen(msg)], 7);
+  ftoa(3.1415927, &msg[strlen(msg)], 7);
   strcat(msg, " ");
   ftoa(upperRearPidIo.Output, &msg[strlen(msg)], 7);
   serialCommWrapperSendMessage(&msg[0], strlen(msg));
