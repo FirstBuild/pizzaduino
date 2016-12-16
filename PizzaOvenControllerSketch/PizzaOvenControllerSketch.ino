@@ -59,7 +59,7 @@ static TcoAndFan tcoAndFan;
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   6
+#define FIRMWARE_BUILD_VERSION   7
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
