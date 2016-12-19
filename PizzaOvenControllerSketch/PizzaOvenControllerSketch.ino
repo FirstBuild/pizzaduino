@@ -48,6 +48,7 @@
 #include "serialCommWrapper.h"
 #include "ftoa.h"
 #include "tcLimitCheck.h"
+#include "globals.h"
 
 static TcoAndFan tcoAndFan;
 static TcLimitCheck ufTcLimit(1400, 30000);
@@ -104,6 +105,8 @@ bool lfTcTempLimitFailed = false;
 uint16_t lfTcLimitExceededCount = 0;
 bool lrTcTempLimitFailed = false;
 uint16_t lrTcLimitExceededCount = 0;
+bool upperTempDiffExceeded = false;
+bool lowerTempDiffExceeded = false;
 
 Heater upperFrontHeater = {{true, 1200, 1300,   0,  100}, 0, 0, relayStateOff, false, 0.0};
 Heater upperRearHeater  = {{true, 1100, 1200,  0, 100}, 0, 0, relayStateOff, false, 0};
@@ -229,6 +232,18 @@ void readThermocouples(void)
   if (needSave)
   {
     saveParametersToMemory(); 
+  }
+
+  // Check differentials
+  if(fabs(fabs(upperFrontHeater.thermocouple - upperFrontPidIo.Setpoint) - fabs(upperRearHeater.thermocouple - upperRearPidIo.Setpoint)) > 500)
+  {
+    upperTempDiffExceeded = true;
+  }
+  double lowerFrontSetpoint = (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn) / 2;
+  double lowerRearSetpoint = (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn) / 2;
+  if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 500)
+  {
+    lowerTempDiffExceeded = true;
   }
 }
 
@@ -361,6 +376,8 @@ void outputFailures(void)
 {
   //                                                       0000000000111111111122222222223
   //                                                       0123456789012345678901234567890
+  static const uint8_t msgUpperDiffExceeded[]   PROGMEM = "Upper differential exceeded";
+  static const uint8_t msgLowerDiffExceeded[]   PROGMEM = "Lower differential exceeded";
   static const uint8_t msgWatchdogReset[]       PROGMEM = "Watchdog reset occurred";
   static const uint8_t msgTcoFailure[]          PROGMEM = "TCO failure";
   static const uint8_t msgCoolingFanFailure[]   PROGMEM = "Cooling fan failure";
@@ -368,7 +385,7 @@ void outputFailures(void)
   static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "UR TC over temp failure";
   static const uint8_t msgLfTcOvertempFailure[] PROGMEM = "LF TC over temp failure";
   static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "LR TC over temp failure";
-  uint8_t msg[27];
+  uint8_t msg[31];
   
   if(tcoAndFan.tcoHasFailed())
   {
@@ -409,15 +426,33 @@ void outputFailures(void)
     serialCommWrapperSendMessage(msg, strlen(msg));  
   }  
 
-  Serial.print("UR limit: ");
+  if (upperTempDiffExceeded)
+  {
+    strcpy_P(msg, msgUpperDiffExceeded);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }  
+  if (lowerTempDiffExceeded)
+  {
+    strcpy_P(msg, msgLowerDiffExceeded);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }  
+
+/*
+  Serial.print(F("UF limit: "));
   Serial.println(ufTcLimit.m_limit);
-  blah blah blah
-        double m_limit;
-      uint32_t m_timeout;
-      uint32_t m_startTime;
-      bool m_timerStarted;
-      bool m_limitFailure;
-};
+  Serial.print(F("UF timeout: "));
+  Serial.println(ufTcLimit.m_timeout);
+  Serial.print(F("UF startTime: "));
+  Serial.println(ufTcLimit.m_startTime);
+  Serial.print(F("UF timer started: "));
+  Serial.println(ufTcLimit.m_timerStarted);
+  Serial.print(F("UF limit failure: "));
+  Serial.println(ufTcLimit.m_limitFailure);
+  Serial.print(F("Some TC has failed: "));
+  Serial.println(SOME_TC_HAS_FAILED);
+  Serial.print(F("All TCs OK: "));
+  Serial.println(ALL_TCS_OK);
+  */
 }
 
 void outputRelayStates(void)
@@ -471,7 +506,7 @@ void PeriodicOutputInfo()
 {
   static uint8_t printPhase = 0;
 #ifdef USE_PID
-#ifdef ENABLE_PID_TUNING
+#ifdef ENABLE_PID_TUNINGssssssssssssss
     double pTerm;
     double iTerm;
     double dTerm;
@@ -493,6 +528,7 @@ void PeriodicOutputInfo()
       outputDoorStatus();
       outputCookingState();
       outputFailures();
+      handleRelayWatchdog();
       outputRelayStates();
       outputPidDutyCycles();
       outputTimeInfo();
