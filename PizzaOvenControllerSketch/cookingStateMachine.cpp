@@ -54,6 +54,7 @@ static FSM poStateMachine = FSM(stateStandby);     //initialize state machine, s
 void requestPizzaOvenStart(void)
 {
   pizzaOvenStartRequested = true;
+  startTime = millis();
 }
 
 void requestPizzaOvenStop(void)
