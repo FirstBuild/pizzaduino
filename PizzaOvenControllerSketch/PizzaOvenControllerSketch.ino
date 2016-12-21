@@ -65,7 +65,7 @@ static TcLimitCheck lrTcLimit(1000, 0);
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   8
+#define FIRMWARE_BUILD_VERSION   9
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -241,7 +241,7 @@ void readThermocouples(void)
   }
   double lowerFrontSetpoint = (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn) / 2;
   double lowerRearSetpoint = (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn) / 2;
-  if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 500)
+  if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 250)
   {
     lowerTempDiffExceeded = true;
   }
@@ -376,15 +376,15 @@ void outputFailures(void)
 {
   //                                                       0000000000111111111122222222223
   //                                                       0123456789012345678901234567890
-  static const uint8_t msgUpperDiffExceeded[]   PROGMEM = "Upper differential exceeded";
-  static const uint8_t msgLowerDiffExceeded[]   PROGMEM = "Lower differential exceeded";
-  static const uint8_t msgWatchdogReset[]       PROGMEM = "Watchdog reset occurred";
-  static const uint8_t msgTcoFailure[]          PROGMEM = "TCO failure";
-  static const uint8_t msgCoolingFanFailure[]   PROGMEM = "Cooling fan failure";
-  static const uint8_t msgUfTcOvertempFailure[] PROGMEM = "UF TC over temp failure";
-  static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "UR TC over temp failure";
-  static const uint8_t msgLfTcOvertempFailure[] PROGMEM = "LF TC over temp failure";
-  static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "LR TC over temp failure";
+  static const uint8_t msgUpperDiffExceeded[]   PROGMEM = "FAIL: upper_diff_exceeded";
+  static const uint8_t msgLowerDiffExceeded[]   PROGMEM = "FAIL: lower_diff_exceeded";
+  static const uint8_t msgWatchdogReset[]       PROGMEM = "WARN: watchdog_reset";
+  static const uint8_t msgTcoFailure[]          PROGMEM = "FAIL: tco_failure";
+  static const uint8_t msgCoolingFanFailure[]   PROGMEM = "FAIL: cooling_fan";
+  static const uint8_t msgUfTcOvertempFailure[] PROGMEM = "FAIL: uf_overtemp";
+  static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "FAIL: ur_overtemp";
+  static const uint8_t msgLfTcOvertempFailure[] PROGMEM = "FAIL: lf_overtemp";
+  static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "FAIL: lr_overtemp";
   uint8_t msg[31];
   
   if(tcoAndFan.tcoHasFailed())
@@ -452,6 +452,14 @@ void outputFailures(void)
   Serial.println(SOME_TC_HAS_FAILED);
   Serial.print(F("All TCs OK: "));
   Serial.println(ALL_TCS_OK);
+  Serial.print(F("upperTempDiffExceeded: "));
+  Serial.println(upperTempDiffExceeded);
+  Serial.print(F("lowerTempDiffExceeded: "));
+  Serial.println(lowerTempDiffExceeded);
+  Serial.print(F("TEMP_DIFFS_OK: "));
+  Serial.println(TEMP_DIFFS_OK);
+  Serial.print(F("TEMP_DIFF_FAIL: "));
+  Serial.println(TEMP_DIFF_FAIL);
   */
 }
 
@@ -477,8 +485,7 @@ void outputPidDutyCycles(void)
   // PidDC 100.0000000 100.0000000
   uint8_t msg[35];
   strcpy(msg, "PidDC ");
-//  ftoa(upperFrontPidIo.Output, &msg[strlen(msg)], 7);
-  ftoa(3.1415927, &msg[strlen(msg)], 7);
+  ftoa(upperFrontPidIo.Output, &msg[strlen(msg)], 7);
   strcat(msg, " ");
   ftoa(upperRearPidIo.Output, &msg[strlen(msg)], 7);
   serialCommWrapperSendMessage(&msg[0], strlen(msg));

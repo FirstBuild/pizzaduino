@@ -18,8 +18,8 @@ extern bool lrTcTempLimitFailed;
 
 extern bool upperTempDiffExceeded;
 extern bool lowerTempDiffExceeded;
-#define TEMP_DIFFS_OK (upperTempDiffExceeded && lowerTempDiffExceeded)
-#define TEMP_DIFF_FAIL (!TEMP_DIFFS_OK)
+#define TEMP_DIFF_FAIL (upperTempDiffExceeded || lowerTempDiffExceeded)
+#define TEMP_DIFFS_OK (!TEMP_DIFF_FAIL)
 
 #endif // GLOBALS_H
 
