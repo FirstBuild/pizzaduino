@@ -64,8 +64,8 @@ static TcLimitCheck lrTcLimit(1000, 0);
 // Macros
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
-#define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   10
+#define FIRMWARE_MINOR_VERSION   1
+#define FIRMWARE_BUILD_VERSION   0
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
