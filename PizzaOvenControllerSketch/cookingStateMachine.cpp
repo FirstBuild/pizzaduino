@@ -14,6 +14,9 @@ static bool pizzaOvenStartRequested = false;
 static bool pizzaOvenStopRequested = false;
 static TcoAndFan tcoAndFan;
 
+static uint32_t startTime = 0;
+#define MAX_RUN_TIME (3 * 3600 * 1000)
+
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
@@ -213,17 +216,26 @@ static void stateHeatCycleEnter()
   
   upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
   upperRearPID.SetMode(AUTOMATIC);
+
+  startTime = millis();
 }
 
 static void stateHeatCycleUpdate()
 {
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
+  uint32_t elapsedTime = (newTime - startTime);
 
   if (!tcoAndFan.areOk())
   {
     poStateMachine.transitionTo(stateStandby);
     return;
+  }
+
+  // check max time limit
+  if (elapsedTime >= MAX_RUN_TIME)
+  {
+   requestPizzaOvenStop();
   }
 
   // only update the relays periodically
