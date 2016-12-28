@@ -14,7 +14,18 @@ static bool pizzaOvenStartRequested = false;
 static bool pizzaOvenStopRequested = false;
 static TcoAndFan tcoAndFan;
 
+// JAMES - startTime is the number of millis when the start button is pressed
+// JAMES - on the front panel.
 static uint32_t startTime = 0;
+// JAMES - MAX_RUN_TIME is the total number of millis that the unit should run
+// JAMES - without start being pressed.
+// JAMES - When I test the code, I used a much smaller number here, something
+// JAMES - perhaps equivalent to 3 minutes of cook time.  For the release,
+// JAMES - I just changed the numbers here to make is 3 hours.  Check my math
+// JAMES - here.  3 hours X 3600 seconds per hour X 1000 milliseconds per
+// JAMES - second.
+// JAMES - Does this need a type cast here?  Should this actually be
+// JAMES - #define MAX_RUN_TIME ((uint32_t)((uint32_t)3 * (uint32_t)3600 * (uint32_t)1000))
 #define MAX_RUN_TIME (3 * 3600 * 1000)
 
 #ifdef USE_PID
@@ -26,6 +37,28 @@ extern PID upperFrontPID;
 extern PID upperRearPID;
 #endif
  
+// JAMES - These are the state definitions for the cooking state machine.
+// JAMES - Each state includes 3 functions, Enter, Update, and Exit.
+// JAMES - The Enter function is called once when a state is entered or
+// JAMES - become active. The Enter function does any prep required for this
+// JAMES - state.
+// JAMES - The Update function is called whenever the .update function is 
+// JAMES - called.  This function is called from the updateCookingStateMachine
+// JAMES - function.  The update function is the 'run' function for a state.
+// JAMES - The code here should do whatever is needed to manage this state.
+// JAMES - The Exit function is called prior to exiting a state.  It contains
+// JAMES - any cleanup necessary for this state.
+//
+// JAMES - A transition to another state is accompilished by calling .transitionTo.
+// JAMES - If the state you are in is A, and you are transitioning to state B, the
+// JAMES - the state machine will call the functions in this order:
+// JAMES - A.Exit(), B.Enter()
+// JAMES - Note that the names given above are for reference.  We have used these
+// JAMES - names within our own function names, but these names are not
+// JAMES - mandatory.  We use them merely for convention.
+//
+// JAMES - Each state defintion below follows a similar pattern.  The three
+// JAMES - required functions are called
 //------------------------------------------
 //state machine setup
 //------------------------------------------
@@ -51,12 +84,20 @@ static State stateCoolDown = State(stateCoolDownEnter, stateCoolDownUpdate, stat
 
 static FSM poStateMachine = FSM(stateStandby);     //initialize state machine, start in state: stateStandby
 
+// JAMES - This function is called to start cooking.  This is where millis is captured
+// JAMES - into the startTime variable.
+// JAMES - The pizzaOvenStart variable is a little dumb in the sense that this is really
+// JAMES - how the oven gets started.  This is left over from the original starting metho
+// JAMES - and really should be refactored.
 void requestPizzaOvenStart(void)
 {
+   // JAMES - It might make sense to put a guard around this.  You should only 
+   // JAMES - be able to start the oven is you are not in the HeatCycle state.
   pizzaOvenStartRequested = true;
   startTime = millis();
 }
 
+// JAMES - This function is called to stop cooking.
 void requestPizzaOvenStop(void)
 {
   pizzaOvenStopRequested = true;
@@ -117,6 +158,9 @@ static void stateStandbyUpdate()
     {
       poStateMachine.transitionTo(stateWaitForDlb);
     }
+    // JAMES - Tim wanted to put a debounce around this for impulse noise performance.
+    // JAMES - If you do this before I return, don't do it without a lot of 
+    // JAMES - thought.
     else if ((upperFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15) ||
              (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_TEMP + 15) ||
              (lowerFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15) ||
@@ -218,6 +262,11 @@ static void stateHeatCycleEnter()
   upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
   upperRearPID.SetMode(AUTOMATIC);
 
+// JAMES - millis is recaptured here.  This is probably not needed, but this
+// JAMES - state is entered when after the start button is pressed and the
+// JAMES - the DLB closes.  This state should be entered seconds after
+// JAMES - the start button is pressed. See Tim for details regarding
+// JAMES - the DLB and sail switch.
   startTime = millis();
 }
 
@@ -225,6 +274,11 @@ static void stateHeatCycleUpdate()
 {
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
+  // JAMES - Calculate the elapsed run time.
+  // JAMES - Note:  I tested this for rollover with a uint8_t and it worked.
+  // JAMES - There may be a corner case here that I did not consider, but 
+  // JAMES - since millis is supposed to rollover after about 50 days, I 
+  // JAMES - would not expect rollover to become an issued until then.
   uint32_t elapsedTime = (newTime - startTime);
 
   if (!tcoAndFan.areOk())
@@ -233,6 +287,7 @@ static void stateHeatCycleUpdate()
     return;
   }
 
+  // JAMES - This is where the 3-hour check happens.  Pretty simple, right?
   // check max time limit
   if (elapsedTime >= MAX_RUN_TIME)
   {
