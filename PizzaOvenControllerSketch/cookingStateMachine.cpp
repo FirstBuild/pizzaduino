@@ -26,7 +26,8 @@ static uint32_t startTime = 0;
 // JAMES - second.
 // JAMES - Does this need a type cast here?  Should this actually be
 // JAMES - #define MAX_RUN_TIME ((uint32_t)((uint32_t)3 * (uint32_t)3600 * (uint32_t)1000))
-#define MAX_RUN_TIME (3 * 3600 * 1000)
+//#define MAX_RUN_TIME (3 * 3600 * 1000)
+#define MAX_RUN_TIME ((uint32_t)((uint32_t)3 * (uint32_t)3600 * (uint32_t)1000))
 
 #ifdef USE_PID
 // PID stuff
