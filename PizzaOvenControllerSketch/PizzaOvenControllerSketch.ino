@@ -242,37 +242,38 @@ void readThermocouples(void)
   // JAMES - If the differential is exceeded, increment the count.
   // JAMES - If the cound is exceeded, set the flag.
   // Check differentials
-  if(fabs(fabs(upperFrontHeater.thermocouple - upperFrontPidIo.Setpoint) - fabs(upperRearHeater.thermocouple - upperRearPidIo.Setpoint)) > 500)
+  if (upperTempDiffExceeded == false)
   {
-    if (upperTcDiffExceededCount < 250) 
+    if(fabs(fabs(upperFrontHeater.thermocouple - upperFrontPidIo.Setpoint) - fabs(upperRearHeater.thermocouple - upperRearPidIo.Setpoint)) > 500)
     {
-      upperTcDiffExceededCount; 
+      upperTcDiffExceededCount++; 
+      if (upperTcDiffExceededCount >= 250) 
+      {
+        upperTempDiffExceeded = true;
+      }
     }
-    else
+    else 
     {
-      upperTempDiffExceeded = true;
+      upperTcDiffExceededCount = 0;
     }
   }
-  else
-  {
-    upperTcDiffExceededCount = 0;
-  }
+
   double lowerFrontSetpoint = (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn) / 2;
   double lowerRearSetpoint = (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn) / 2;
-  if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 250)
+  if (lowerTempDiffExceeded == false)
   {
-    if (lowerTcDiffExceededCount < 250) 
+    if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 250)
     {
-      lowerTcDiffExceededCount; 
+      lowerTcDiffExceededCount++; 
+      if (lowerTcDiffExceededCount >= 250) 
+      {
+        lowerTempDiffExceeded = true;
+      }
     }
     else
     {
-      lowerTempDiffExceeded = true;
+      lowerTcDiffExceededCount = 0;
     }
-  }
-  else
-  {
-    lowerTcDiffExceededCount = 0;
   }
 }
 
