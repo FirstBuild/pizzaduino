@@ -30,4 +30,6 @@
 #define MAX_UPPER_TEMP (1300)
 #define MAX_LOWER_TEMP (800)
 
+#define MAX_RUN_TIME ((uint32_t)((uint32_t)3 * (uint32_t)3600 * (uint32_t)1000))
+
 #endif /* CONFIG_H_ */

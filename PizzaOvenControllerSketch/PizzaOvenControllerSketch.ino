@@ -538,6 +538,7 @@ void outputTimeInfo(void)
 void PeriodicOutputInfo()
 {
   static uint8_t printPhase = 0;
+  uint32_t maxTimeTestVar = (uint32_t)3 * 3600 * 1000;
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNINGssssssssssssss
     double pTerm;
