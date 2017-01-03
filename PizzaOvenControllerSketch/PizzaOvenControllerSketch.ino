@@ -53,8 +53,8 @@
 static TcoAndFan tcoAndFan;
 static TcLimitCheck ufTcLimit(1400, 30000);
 static TcLimitCheck urTcLimit(1400, 30000);
-static TcLimitCheck lfTcLimit(1000, 0);
-static TcLimitCheck lrTcLimit(1000, 0);
+static TcLimitCheck lfTcLimit(1000, 5000);
+static TcLimitCheck lrTcLimit(1000, 5000);
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffff)
@@ -105,17 +105,16 @@ bool lfTcTempLimitFailed = false;
 uint16_t lfTcLimitExceededCount = 0;
 bool lrTcTempLimitFailed = false;
 uint16_t lrTcLimitExceededCount = 0;
-bool upperTempDiffExceeded = false;
-// JAMES - This has been added to debounce the temp differential
-uint8_t upperTcDiffExceededCount = 0;
-bool lowerTempDiffExceeded = false;
-// JAMES - This has been added to debounce the temp differential
-uint8_t lowerTcDiffExceededCount = 0;
 
-Heater upperFrontHeater = {{true, 1200, 1300,   0,  100}, 0, 0, relayStateOff, false, 0.0};
+bool upperTempDiffExceeded = false;
+uint8_t upperTempDiffExceededCount = 0;
+bool lowerTempDiffExceeded = false;
+uint8_t lowerTempDiffExceededCount = 0;
+
+Heater upperFrontHeater = {{true, 1200, 1300,  0, 100}, 0, 0, relayStateOff, false, 0.0};
 Heater upperRearHeater  = {{true, 1100, 1200,  0, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerFrontHeater = {{true,  600,  650,  50, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerRearHeater  = {{true,  575,  625,   0,  49}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{true,  600,  650, 50, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerRearHeater  = {{true,  575,  625,  0,  49}, 0, 0, relayStateOff, false, 0};
 
 // convenience array, could go into flash
 Heater *aHeaters[4] =
@@ -238,23 +237,20 @@ void readThermocouples(void)
     saveParametersToMemory(); 
   }
 
-  // JAMES - Adding debounce around the temp differential. Basic logic:
-  // JAMES - If the differential is exceeded, increment the count.
-  // JAMES - If the cound is exceeded, set the flag.
   // Check differentials
   if (upperTempDiffExceeded == false)
   {
     if(fabs(fabs(upperFrontHeater.thermocouple - upperFrontPidIo.Setpoint) - fabs(upperRearHeater.thermocouple - upperRearPidIo.Setpoint)) > 500)
     {
-      upperTcDiffExceededCount++; 
-      if (upperTcDiffExceededCount >= 250) 
+      upperTempDiffExceededCount++; 
+      if (upperTempDiffExceededCount >= 250) 
       {
         upperTempDiffExceeded = true;
       }
     }
     else 
     {
-      upperTcDiffExceededCount = 0;
+      upperTempDiffExceededCount = 0;
     }
   }
 
@@ -264,15 +260,15 @@ void readThermocouples(void)
   {
     if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 250)
     {
-      lowerTcDiffExceededCount++; 
-      if (lowerTcDiffExceededCount >= 250) 
+      lowerTempDiffExceededCount++; 
+      if (lowerTempDiffExceededCount >= 250) 
       {
         lowerTempDiffExceeded = true;
       }
     }
     else
     {
-      lowerTcDiffExceededCount = 0;
+      lowerTempDiffExceededCount = 0;
     }
   }
 }
@@ -742,6 +738,9 @@ void setup()
   uint8_t mcusrAtStart = MCUSR;
   cli(); 
   wdt_reset();
+
+  upperTempDiffExceededCount = 0;
+  lowerTempDiffExceededCount = 0;
 
   /* Clear all flags in MCUSR */
   MCUSR &= ~((1<<WDRF) | (1<<BORF) | (1<<EXTRF) | (1<<PORF) );
