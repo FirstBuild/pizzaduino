@@ -26,6 +26,7 @@
 
 /*
  * Port pin interrupt stuff
+ * PD5 - PCINT21 - Pin change interrupt 21 - Using PCINT2
  * PD4 - PCINT20 - Pin change interrupt 20 - Using PCINT2
  * PD3 - PCINT19 - Pin change interrupt 19 - Using INT1
  * PC5 - PCINT13 - Pin change interrupt 13 - Using PCINT1
@@ -36,6 +37,7 @@
  * AC Input 1 - PD4 - Arduino pin D4
  * AC Input 2 - PD3 - Arduino pin D3
  * AC Input 3 - PC5 - Arduino pin A5
+ * AC voltage detect input - PD5/OC0B/T1 - Arduino pin D5
  */
 
 #include "acInput.h"
@@ -43,13 +45,21 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 
+#define AC_POWER_PIN (PIND & (1<<PD5))
+#define AC_INPUT_1_PIN (PIND & (1<<PD4))
+
+static volatile uint8_t acPowerPinLastValue = AC_POWER_PIN;
+static volatile uint8_t acInput1PinLastValue = AC_INPUT_1_PIN;
+
 static uint32_t oldTime = 0;
-static bool acInputOneState = false;
-static bool acInputTwoState = false;
-static bool acInputThreeState = false;
-static volatile uint32_t acInputOneCount = 0;
-static volatile uint32_t acInputTwoCount = 0;
-static volatile uint32_t acInputThreeCount = 0;
+static bool powerButtonState = false;
+static bool sailSwitchState = false;
+static bool tcoState = false;
+static bool acPowerPinState = false;
+static volatile uint32_t powerButtonCount = 0;
+static volatile uint32_t sailSwitchCount = 0;
+static volatile uint32_t tcoCount = 0;
+static volatile uint32_t acPowerPinCount = 0;
 
 static void pciSetup(byte pin)
 {
@@ -60,17 +70,26 @@ static void pciSetup(byte pin)
 
 ISR (PCINT2_vect)
 {
-  acInputOneCount++;
+  if(acInput1PinLastValue != AC_INPUT_1_PIN)
+  {
+    powerButtonCount++;
+    acInput1PinLastValue = AC_INPUT_1_PIN;
+  }
+  if(acPowerPinLastValue != AC_POWER_PIN)
+  {
+    acPowerPinCount++;
+    acPowerPinLastValue = AC_POWER_PIN;
+  }
 }
 
 ISR (PCINT1_vect)
 {
-  acInputThreeCount++;
+  tcoCount++;
 }
 
 void myINT1_vect(void)
 {
-  acInputTwoCount++;
+  sailSwitchCount++;
 }
 
 void acInputsInit(void)
@@ -78,6 +97,8 @@ void acInputsInit(void)
   pinMode(A5, INPUT);
   // Arduino pin 4 is tied to 328P port pin PD4, use the pin change interrupt for input
   pciSetup(4);
+  pinMode(5, INPUT);
+  pciSetup(5);
   // Arduino pin 3 is tied to 328P port pin PD3, use the INT1 interrupt for input
   attachInterrupt(digitalPinToInterrupt(3), myINT1_vect, CHANGE);
   // Arduino pin A5 is tied to 328P port pin PC5, use the pin change interrupt for input
@@ -92,28 +113,35 @@ void acInputsRun(void)
   {
     oldTime = newTime;
     noInterrupts();
-    acInputOneState = acInputOneCount > 5;
-    acInputTwoState = acInputTwoCount > 5;
-    acInputThreeState = acInputThreeCount > 5;
-    acInputOneCount = 0;
-    acInputTwoCount = 0;
-    acInputThreeCount = 0;
+    powerButtonState = powerButtonCount > 5;
+    sailSwitchState = sailSwitchCount > 5;
+    tcoState = tcoCount > 5;
+    acPowerPinState = acPowerPinCount > 5;
+    powerButtonCount = 0;
+    sailSwitchCount = 0;
+    tcoCount = 0;
+    acPowerPinCount = 0;
     interrupts();
   }
 }
 
 bool powerButtonIsOn(void)
 {
-  return acInputOneState;
+  return powerButtonState;
 }
 
 bool sailSwitchIsOn(void)
 {
-  return acInputTwoState;
+  return sailSwitchState;
 }
 
 bool tcoInputIsOn(void)
 {
-  return acInputThreeState;
+  return tcoState;
+}
+
+bool acPowerIsPresent(void)
+{
+  return acPowerPinState;
 }
 

@@ -40,5 +40,6 @@ void acInputsRun(void);
 bool powerButtonIsOn(void);
 bool sailSwitchIsOn(void);
 bool tcoInputIsOn(void);
+bool acPowerIsPresent(void);
 
 #endif

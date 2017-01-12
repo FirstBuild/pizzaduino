@@ -42,7 +42,7 @@ void TcoAndFan::reset(void)
 
 bool TcoAndFan::areOk(void)
 {
-  if (powerButtonIsOn())
+  if (powerButtonIsOn() && acPowerIsPresent())
   {
     if(millis() - oldMillis > 5000)
     {

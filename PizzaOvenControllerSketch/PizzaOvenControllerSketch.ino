@@ -45,10 +45,10 @@
 #include "cookingStateMachine.h"
 #include "tcoAndFanCheck.h"
 #include <avr/wdt.h>
-#include "serialCommWrapper.h"
 #include "ftoa.h"
 #include "tcLimitCheck.h"
 #include "globals.h"
+#include "serialCommWrapper.h"
 
 static TcoAndFan tcoAndFan;
 static TcLimitCheck ufTcLimit(1400, 30000);
@@ -320,12 +320,13 @@ void outputAcInputStates(void)
 {
   //                                            0000000000111111111122222222223
   //                                            0123456789012345678901234567890
-  static const uint8_t msgTemplate[] PROGMEM = "Power 7 L2DLB 8 TCO 9";
-  uint8_t msg[25];
+  static const uint8_t msgTemplate[] PROGMEM = "Power 7 L2DLB 8 TCO 9 AC 3";
+  uint8_t msg[28];
   strcpy_P(&msg[0], &msgTemplate[0]);
-  msg[6] = '0' + powerButtonIsOn();
-  msg[14] = '0' + sailSwitchIsOn();
-  msg[20] = '0' + tcoInputIsOn();
+  msg[6]  = powerButtonIsOn() ? '1' : '0';
+  msg[14] = sailSwitchIsOn() ? '1' : '0';
+  msg[20] = tcoInputIsOn() ? '1' : '0';
+  msg[25] = acPowerIsPresent() ? '1' : '0';
   serialCommWrapperSendMessage(&msg[0], strlen(msg));
 }
 
@@ -411,6 +412,7 @@ void outputFailures(void)
   static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "FAIL: ur_overtemp";
   static const uint8_t msgLfTcOvertempFailure[] PROGMEM = "FAIL: lf_overtemp";
   static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "FAIL: lr_overtemp";
+  static const uint8_t msgDoorDropped[]         PROGMEM = "FAIL: door_dropped";
   uint8_t msg[31];
   
   if(tcoAndFan.tcoHasFailed())
@@ -462,6 +464,11 @@ void outputFailures(void)
     strcpy_P(msg, msgLowerDiffExceeded);
     serialCommWrapperSendMessage(msg, strlen(msg));  
   }  
+  if (doorInput.IsActive())
+  {
+    strcpy_P(msg, msgDoorDropped);
+    serialCommWrapperSendMessage(msg, strlen(msg));  
+  }
 
 /*
   Serial.print(F("UF limit: "));

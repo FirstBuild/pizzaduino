@@ -244,7 +244,6 @@ static void stateHeatCycleUpdate()
   // Handle triac control
   if (currentTriacTimerCounter != oldTriacTimerCounter)
   {
-    //    CoolingFanControl(true);
 #ifdef USE_PID
     UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
     UpdateHeatControlWithPID(&upperRearHeater, currentTriacTimerCounter);
@@ -261,7 +260,6 @@ static void stateHeatCycleUpdate()
   // Handle relay control
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
-    //    CoolingFanControl(true);
     UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
     UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
 
