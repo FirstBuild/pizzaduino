@@ -108,19 +108,28 @@ void acInputsInit(void)
 void acInputsRun(void)
 {
   uint32_t newTime = millis();
+  static uint32_t oldAcTime = 0;
 
-  if ((newTime - oldTime) >= 100)
+  if ((newTime - oldAcTime) >= 60)
+  {
+    oldAcTime = newTime;
+    noInterrupts();
+    acPowerPinState = acPowerPinCount > 4;
+    acPowerPinCount = 0;
+    interrupts();
+  }
+
+  if ((newTime - oldTime) >= 120)
   {
     oldTime = newTime;
+    oldAcTime = newTime;
     noInterrupts();
-    powerButtonState = powerButtonCount > 5;
-    sailSwitchState = sailSwitchCount > 5;
-    tcoState = tcoCount > 5;
-    acPowerPinState = acPowerPinCount > 5;
+    powerButtonState = (powerButtonCount > 5) && acPowerPinState;
+    sailSwitchState = (sailSwitchCount > 5) && acPowerPinState;
+    tcoState = (tcoCount > 5) && acPowerPinState;
     powerButtonCount = 0;
     sailSwitchCount = 0;
     tcoCount = 0;
-    acPowerPinCount = 0;
     interrupts();
   }
 }
