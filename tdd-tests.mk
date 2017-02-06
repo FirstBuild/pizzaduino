@@ -31,6 +31,7 @@ SRC_FILES = PizzaOvenControllerSketch/crc.cpp \
 	    PizzaOvenControllerSketch/ringbuf.cpp \
 	    PizzaOvenControllerSketch/ftoa.cpp \
 	    PizzaOvenControllerSketch/tcLimitCheck.cpp \
+	    PizzaOvenControllerSketch/utility.cpp \
 	    
 TEST_SRC_DIRS = \
 	Tests \

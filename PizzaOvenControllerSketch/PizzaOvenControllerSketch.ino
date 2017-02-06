@@ -65,7 +65,7 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   1
-#define FIRMWARE_BUILD_VERSION   5
+#define FIRMWARE_BUILD_VERSION   6
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -378,7 +378,10 @@ void outputCookingState(void)
   //                                            0123456789012345678901234567890
   static const uint8_t msgStandby[]  PROGMEM = "State Standby";
   static const uint8_t msgDlb[]      PROGMEM = "State DLB";
+  static const uint8_t msgPreheat1[] PROGMEM = "State Preheat1";
+  static const uint8_t msgPreheat2[] PROGMEM = "State Preheat2";
   static const uint8_t msgCooking[]  PROGMEM = "State Cooking";
+  static const uint8_t msgStandbyBottom[]  PROGMEM = "State Idle";
   static const uint8_t msgCooldown[] PROGMEM = "State Cooldown";
   uint8_t msg[20];
   switch (getCookingState())
@@ -389,8 +392,17 @@ void outputCookingState(void)
     case cookingWaitForDlb:
       strcpy_P(msg, msgDlb);
       break;
+    case cookingPreheatStage1:
+      strcpy_P(msg, msgPreheat1);
+      break;
+    case cookingPreheatStage2:
+      strcpy_P(msg, msgPreheat2);
+      break;
     case cookingCooking:
       strcpy_P(msg, msgCooking);
+      break;
+    case cookingIdle:
+      strcpy_P(msg, msgStandbyBottom);
       break;
     case cookingCooldown:
       strcpy_P(msg, msgCooldown);
@@ -547,7 +559,7 @@ void PeriodicOutputInfo()
   static uint8_t printPhase = 0;
   uint32_t maxTimeTestVar = (uint32_t)3 * 3600 * 1000;
 #ifdef USE_PID
-#ifdef ENABLE_PID_TUNINGssssssssssssss
+#ifdef ENABLE_PID_TUNING
     double pTerm;
     double iTerm;
     double dTerm;
