@@ -22,7 +22,6 @@
 
 // Pizza Oven Project
 
-//#include "FiniteStateMachine.h"
 #include "TimerOne.h"
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
