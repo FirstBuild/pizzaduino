@@ -65,20 +65,11 @@ void printHeaterTemperatureParameters(const char *pName, uint16_t *pParams)
   strcpy_P(msg, pName);
   for (i = 0; i < 4; i++)
   {
-    itoa(pParams[i], buf, 10);
-    strcat(msg, buf);
-    strcat(msg, " ");
+    itoa(pParams[i], (char *)buf, 10);
+    strcat((char *)msg, (const char *)buf);
+    strcat((char *)msg, " ");
   }
-  serialCommWrapperSendMessage(msg, strlen(msg));
-/*
-  Serial.print(pName);
-  for (i = 0; i < 4; i++)
-  {
-    Serial.print(pParams[i]);
-    Serial.print(" ");
-  }
-  Serial.println("");
-  */
+  serialCommWrapperSendMessage(msg, (uint8_t)strlen((const char *)msg));
 }
 
 void printMessageWithTwoUints(uint8_t * pText, uint16_t uint1, uint16_t uint2)

@@ -13,6 +13,10 @@
 static bool pizzaOvenStartRequested = false;
 static bool pizzaOvenStopRequested = false;
 static TcoAndFan tcoAndFan;
+static uint32_t currentTriacTimerCounter, oldTriacTimerCounter;
+static uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
+static float preheatStage1TerminationDelta = 150.0;
+static bool preheatToIdle = false;
 
 #ifdef USE_PID
 // PID stuff
@@ -36,10 +40,25 @@ static void stateWaitForDlbUpdate();
 static void stateWaitForDlbExit();
 static State stateWaitForDlb = State(stateWaitForDlbEnter, stateWaitForDlbUpdate, stateWaitForDlbExit);
 
+static void statePreheatStage1Enter();
+static void statePreheatStage1Update();
+static void statePreheatStage1Exit();
+static State statePreheatStage1 = State(statePreheatStage1Enter, statePreheatStage1Update, statePreheatStage1Exit);
+
+static void statePreheatStage2Enter();
+static void statePreheatStage2Update();
+static void statePreheatStage2Exit();
+static State statePreheatStage2 = State(statePreheatStage2Enter, statePreheatStage2Update, statePreheatStage2Exit);
+
 static void stateHeatCycleEnter();
 static void stateHeatCycleUpdate();
 static void stateHeatCycleExit();
 static State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
+
+static void stateIdleEnter();
+static void stateIdleUpdate();
+static void stateIdleExit();
+static State stateIdle = State(stateIdleEnter, stateIdleUpdate, stateIdleExit);
 
 static void stateCoolDownEnter();
 static void stateCoolDownUpdate();
@@ -80,6 +99,14 @@ cookingState getCookingState(void)
   {
     state = cookingWaitForDlb;
   }
+  else if (poStateMachine.isInState(statePreheatStage1))
+  {
+    state = cookingPreheatStage1;
+  }
+  else if (poStateMachine.isInState(statePreheatStage2))
+  {
+    state = cookingPreheatStage2;
+  }
   else if (poStateMachine.isInState(stateHeatCycle))
   {
     state = cookingCooking;
@@ -99,7 +126,7 @@ cookingState getCookingState(void)
 
 static void stateStandbyEnter()
 {
-  Serial.println(F("DEBUG stateStandbyEnter"));
+  Serial.println(F("DEBUG entering standby"));
   AllHeatersOffStateClear();
   CoolingFanControl(coolingFanOff);
 }
@@ -128,7 +155,7 @@ static void stateStandbyUpdate()
 
 static void stateStandbyExit()
 {
-  Serial.println(F("DEBUG SX"));
+  Serial.println(F("DEBUG exiting standby"));
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
   tcoAndFan.reset();
@@ -140,7 +167,7 @@ static void stateStandbyExit()
 //State stateWaitForDlb = State(stateWaitForDlbEnter, stateWaitForDlbUpdate, stateWaitForDlbExit);
 static void stateWaitForDlbEnter(void)
 {
-  Serial.println(F("DEBUG Entering stateWaitForDlb."));
+  Serial.println(F("DEBUG entering wait for DLB."));
   CoolingFanControl(coolingFanHigh);
 }
 
@@ -157,13 +184,13 @@ static void stateWaitForDlbUpdate(void)
   }
   else if (sailSwitchIsOn() && tcoInputIsOn())
   {
-    poStateMachine.transitionTo(stateHeatCycle);
+    poStateMachine.transitionTo(statePreheatStage1);
   } 
 }
 
 static void stateWaitForDlbExit(void)
 {
-  Serial.println(F("DEBUG Exiting stateWaitForDlb."));
+  Serial.println(F("DEBUG Exiting wait for DLB."));
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
 
@@ -187,17 +214,199 @@ double getURSeedValue(double t)
 }
 
 //------------------------------------------
+//state machine statePreheatState1
+//------------------------------------------
+// State statePreheatStage1 = State(statePreheatStage1Enter, statePreheatStage1Update, statePreheatStage1Exit);
+
+static void statePreheatStage1Enter()
+{
+  Serial.println(F("DEBUG entering preheat stage 1"));
+
+  // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
+  triacTimeBase = 0;
+  relayTimeBase = 0;
+}
+
+static void statePreheatStage1Update()
+{
+  static uint32_t oldTime = 0;
+  uint32_t newTime = millis();
+
+  if (!tcoAndFan.areOk())
+  {
+    poStateMachine.transitionTo(stateStandby);
+    return;
+  }
+
+  // only update the relays periodically
+  if (oldTime < newTime)
+  {
+    if ((newTime - oldTime) < 7)
+    {
+      return;
+    }
+  }
+  oldTime = newTime;
+
+  // Save working value triacTimeBase since can be updated by interrupt
+  currentRelayTimerCounter = relayTimeBase;
+
+  // force triacs off
+  upperFrontHeater.relayState = relayStateOff;
+  upperRearHeater.relayState = relayStateOff;
+  UpdateHeaterHardware();
+
+  // Handle relay control
+  if (currentRelayTimerCounter != oldRelayTimerCounter)
+  {
+    UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
+
+    UpdateHeaterHardware();
+
+    oldRelayTimerCounter = currentRelayTimerCounter;
+  }
+
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  {
+    pizzaOvenStopRequested = false;
+    poStateMachine.transitionTo(stateCoolDown);
+  }
+  else
+  {
+    if (((lowerFrontHeater.parameter.tempSetPointHighOff - lowerFrontHeater.thermocouple) < preheatStage1TerminationDelta) &&
+        ((lowerRearHeater.parameter.tempSetPointHighOff - lowerRearHeater.thermocouple) < preheatStage1TerminationDelta))
+    {
+      if (preheatToIdle)
+      {
+        poStateMachine.transitionTo(stateIdle);
+      }
+      else
+      {
+        poStateMachine.transitionTo(statePreheatStage2);
+      }
+    }
+  }
+}
+
+static void statePreheatStage1Exit()
+{
+  Serial.println(F("DEBUG Exiting preheat stage 1"));
+}
+
+//------------------------------------------
+//state machine statePreheatStage2
+//------------------------------------------
+// State statePreheatStage2 = State(statePreheatStage2Enter, statePreheatStage2Update, statePreheatStage2Exit);
+
+static void statePreheatStage2Enter()
+{
+  Serial.println(F("DEBUG entering preheat stage 2"));
+
+  // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
+  triacTimeBase = 0;
+  // Fake the old time so that we exercise the relays the first time through
+  oldTriacTimerCounter = 100000;
+
+  changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
+  changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
+  
+  upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
+  upperFrontPID.SetMode(AUTOMATIC);
+  
+  upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
+  upperRearPID.SetMode(AUTOMATIC);
+}
+
+static void statePreheatStage2Update()
+{
+  static uint32_t oldTime = 0;
+  uint32_t newTime = millis();
+
+  if (!tcoAndFan.areOk())
+  {
+    poStateMachine.transitionTo(stateStandby);
+    return;
+  }
+
+  // only update the relays periodically
+  if (oldTime < newTime)
+  {
+    if ((newTime - oldTime) < 7)
+    {
+      return;
+    }
+  }
+  oldTime = newTime;
+
+  // Save working value triacTimeBase since can be updated by interrupt
+  currentTriacTimerCounter = triacTimeBase;
+  currentRelayTimerCounter = relayTimeBase;
+
+  // Handle triac control
+  if (currentTriacTimerCounter != oldTriacTimerCounter)
+  {
+#ifdef USE_PID
+    UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
+    UpdateHeatControlWithPID(&upperRearHeater, currentTriacTimerCounter);
+#else
+    UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+    UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
+#endif
+
+    UpdateHeaterHardware();
+
+    oldTriacTimerCounter = currentTriacTimerCounter;
+  }
+
+  // Handle relay control
+  if (currentRelayTimerCounter != oldRelayTimerCounter)
+  {
+    UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
+
+    UpdateHeaterHardware();
+
+    oldRelayTimerCounter = currentRelayTimerCounter;
+  }
+
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  {
+    pizzaOvenStopRequested = false;
+    poStateMachine.transitionTo(stateCoolDown);
+  }
+  else
+  {
+    if ((lowerFrontHeater.thermocouple >= (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn)/2) &&
+        ( lowerRearHeater.thermocouple >= (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn)/2) &&
+        (upperFrontHeater.thermocouple >= (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2) &&
+        ( upperRearHeater.thermocouple >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2))
+    {
+      if (preheatToIdle)
+      {
+        poStateMachine.transitionTo(stateIdle);
+      }
+      else
+      {
+        poStateMachine.transitionTo(stateHeatCycle);
+      }
+    }
+  }
+}
+
+static void statePreheatStage2Exit()
+{
+  Serial.println(F("DEBUG Exiting preheat stage 2"));
+}
+
+//------------------------------------------
 //state machine stateHeatCycle
 //------------------------------------------
 //State stateHeatCycle = State(stateHeatCycleEnter, stateHeatCycleUpdate, stateHeatCycleExit);
-static uint32_t currentTriacTimerCounter, oldTriacTimerCounter;
-static uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 
 static void stateHeatCycleEnter()
 {
-  double seed;
-  
-  Serial.println(F("DEBUG stateHeatCycleEnter"));
+  Serial.println(F("DEBUG entering heat cycle"));
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   triacTimeBase = 0;
@@ -277,14 +486,69 @@ static void stateHeatCycleUpdate()
 
 static void stateHeatCycleExit()
 {
-  Serial.println("DEBUG HX");
-  AllHeatersOffStateClear();
-  upperFrontPID.SetMode(MANUAL);
-  upperFrontPidIo.Output = 0.0;
-  upperRearPID.SetMode(MANUAL);
-  upperRearPidIo.Output = 0.0;
-  pizzaOvenStartRequested = false;
-  pizzaOvenStopRequested = false;
+  Serial.println(F("DEBUG exiting heat cycle"));
+}
+
+//------------------------------------------
+//state machine stateIdle
+//------------------------------------------
+// State stateIdle = State(stateIdleEnter, stateIdleUpdate, stateIdleExit);
+
+static void stateIdleEnter()
+{
+  Serial.println(F("DEBUG entering idle"));
+}
+
+static void stateIdleUpdate()
+{
+  static uint32_t oldTime = 0;
+  uint32_t newTime = millis();
+
+  if (!tcoAndFan.areOk())
+  {
+    poStateMachine.transitionTo(stateStandby);
+    return;
+  }
+
+  // only update the relays periodically
+  if (oldTime < newTime)
+  {
+    if ((newTime - oldTime) < 7)
+    {
+      return;
+    }
+  }
+  oldTime = newTime;
+
+  // Save working value triacTimeBase since can be updated by interrupt
+  currentRelayTimerCounter = relayTimeBase;
+
+  // force triacs off
+  upperFrontHeater.relayState = relayStateOff;
+  upperRearHeater.relayState = relayStateOff;
+  UpdateHeaterHardware();
+
+  // Handle relay control
+  if (currentRelayTimerCounter != oldRelayTimerCounter)
+  {
+    UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
+
+    UpdateHeaterHardware();
+
+    oldRelayTimerCounter = currentRelayTimerCounter;
+  }
+
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  {
+    pizzaOvenStopRequested = false;
+    poStateMachine.transitionTo(stateCoolDown);
+  }
+}
+
+static void stateIdleExit()
+{
+  Serial.println(F("DEBUG Exiting idle"));
 }
 
 //------------------------------------------
@@ -295,9 +559,15 @@ static void stateHeatCycleExit()
 
 static void stateCoolDownEnter()
 {
-  Serial.println(F("DEBUG stateCoolDown"));
+  Serial.println(F("DEBUG entering cooldown"));
   CoolingFanControl(coolingFanLow);
   AllHeatersOffStateClear();
+  upperFrontPID.SetMode(MANUAL);
+  upperFrontPidIo.Output = 0.0;
+  upperRearPID.SetMode(MANUAL);
+  upperRearPidIo.Output = 0.0;
+  pizzaOvenStartRequested = false;
+  pizzaOvenStopRequested = false;
 }
 
 static void stateCoolDownUpdate()
@@ -327,7 +597,7 @@ static void stateCoolDownUpdate()
 
 static void stateCoolDownExit()
 {
-  Serial.println(F("DEBUG CX"));
+  Serial.println(F("DEBUG exiting cooldown"));
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
 
