@@ -33,6 +33,12 @@ class  FilterBeLp2
       v[0] = 0.0;
       v[1] = 0.0;
     }
+    initialize(float initVal)
+    {
+      v[0] = initVal/4;
+      v[1] = initVal/4;
+      v[2] = initVal/4;
+    }
   private:
     float v[3];
   public:
