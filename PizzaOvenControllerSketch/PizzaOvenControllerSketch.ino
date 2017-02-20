@@ -21,7 +21,6 @@
 */
 
 // Pizza Oven Project
-
 #include "TimerOne.h"
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
@@ -64,7 +63,7 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   1
-#define FIRMWARE_BUILD_VERSION   5
+#define FIRMWARE_BUILD_VERSION   6
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -162,10 +161,41 @@ void readParametersFromMemory(void);
 static void handleIncomingMessage(uint8_t *pData, uint8_t length);
 bool needSave = false;
 
+static float slewRateLimit(float newValue, float oldValue, float limit)
+{
+  float difference;
+  
+  if (newValue > oldValue)
+  {
+    difference = newValue - oldValue;
+    if (difference <= limit)
+    {
+      return newValue;  
+    }
+    else
+    {
+      return oldValue + limit;
+    }
+  }
+  else
+  {
+    difference = oldValue - newValue;
+    if (difference <= limit)
+    {
+      return newValue;  
+    }
+    else
+    {
+      return oldValue - limit;
+    }    
+  }
+}
+
 void readThermocouples(void)
 {
-  static uint32_t oldTime = 0;
+  static uint32_t oldTime = 1000;
   uint32_t newTime = millis();
+  static bool filtersInitialized = false;
 
   if (newTime >= oldTime)
   {
@@ -185,10 +215,28 @@ void readThermocouples(void)
 
   oldTime = newTime;
 
-  upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
-  upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
-  lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
-  lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
+  if (!filtersInitialized)
+  {
+    if (newTime < 1000) return;
+    upperFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
+    upperRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
+    lowerFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
+    lowerRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+    upperFrontHeater.tcFilter.initialize(upperFrontHeater.thermocouple);
+    upperRearHeater.tcFilter.initialize(upperRearHeater.thermocouple);
+    lowerFrontHeater.tcFilter.initialize(lowerFrontHeater.thermocouple);
+    lowerRearHeater.tcFilter.initialize(lowerRearHeater.thermocouple);
+    filtersInitialized = true;
+  }
+
+  upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT), upperFrontHeater.thermocouple, 57.0)); // 57.0
+  upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_REAR), upperRearHeater.thermocouple, 57.0));
+  lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT), lowerFrontHeater.thermocouple, 4.4)); // 4.4
+  lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_REAR), lowerRearHeater.thermocouple, 4.4));
 
   ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
   urTcLimit.checkLimit(upperRearHeater.thermocouple);
@@ -377,7 +425,10 @@ void outputCookingState(void)
   //                                            0123456789012345678901234567890
   static const uint8_t msgStandby[]  PROGMEM = "State Standby";
   static const uint8_t msgDlb[]      PROGMEM = "State DLB";
+  static const uint8_t msgPreheat1[] PROGMEM = "State Preheat1";
+  static const uint8_t msgPreheat2[] PROGMEM = "State Preheat2";
   static const uint8_t msgCooking[]  PROGMEM = "State Cooking";
+  static const uint8_t msgStandbyBottom[]  PROGMEM = "State Idle";
   static const uint8_t msgCooldown[] PROGMEM = "State Cooldown";
   uint8_t msg[20];
   switch (getCookingState())
@@ -388,8 +439,17 @@ void outputCookingState(void)
     case cookingWaitForDlb:
       strcpy_P(msg, msgDlb);
       break;
+    case cookingPreheatStage1:
+      strcpy_P(msg, msgPreheat1);
+      break;
+    case cookingPreheatStage2:
+      strcpy_P(msg, msgPreheat2);
+      break;
     case cookingCooking:
       strcpy_P(msg, msgCooking);
+      break;
+    case cookingIdle:
+      strcpy_P(msg, msgStandbyBottom);
       break;
     case cookingCooldown:
       strcpy_P(msg, msgCooldown);
@@ -546,7 +606,7 @@ void PeriodicOutputInfo()
   static uint8_t printPhase = 0;
   uint32_t maxTimeTestVar = (uint32_t)3 * 3600 * 1000;
 #ifdef USE_PID
-#ifdef ENABLE_PID_TUNINGssssssssssssss
+#ifdef ENABLE_PID_TUNING
     double pTerm;
     double iTerm;
     double dTerm;
@@ -864,6 +924,7 @@ void setup()
 /*
    Serial commands prefixes:
 
+   d - set dome on or off
    f - set off percent
    g - set pid gains
    G - get the pid gains
@@ -909,14 +970,35 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
       switch (receivedCommandBuffer[0])
       {
         case 's':  // Start Pizza Oven Cycle
-          //pizzaOvenStartRequested = true;
           requestPizzaOvenStart();
           receivedCommandBufferIndex = 0;
           Serial.println(F("DEBUG Pizza oven start requested."));
           break;
 
+        case 'd':  // Go to idle
+          if (receivedCommandBufferIndex >= 2)
+          {
+            switch (receivedCommandBuffer[1])
+            {
+              case '0' :
+                setDomeState('0');
+                break;
+              case '1' :
+                setDomeState('1');
+                break;
+              default:
+                Serial.print(F("DEBUG unknown command received for the 'd' command: "));
+                Serial.println(receivedCommandBuffer[1]);
+                break;
+            }
+
+            receivedCommandBufferIndex = 0;
+          }
+          break;
+          Serial.println(F("DEBUG Pizza oven idle requested."));
+          break;
+
         case 'q': // Quit Pizza Oven Cycle
-          //pizzaOvenStopRequested = true;
           requestPizzaOvenStop();
           receivedCommandBufferIndex = 0;
           upperFrontPID.SetMode(MANUAL);
@@ -1267,8 +1349,9 @@ void loop()
   boostEnable(relayBoostRun);
   relayDriverRun();
 
-  PeriodicOutputInfo();
   handleRelayWatchdog();
+
+  PeriodicOutputInfo();
 
   // PID
 #ifdef USE_PID
@@ -1279,6 +1362,7 @@ void loop()
   ConvertHeaterPercentCounts();
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
   upperRearHeater.heaterCountsOn  = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+
 #endif
 }
 

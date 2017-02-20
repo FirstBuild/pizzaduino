@@ -26,7 +26,10 @@
 typedef enum {
   cookingStandby,
   cookingWaitForDlb,
+  cookingPreheatStage1,
+  cookingPreheatStage2,
   cookingCooking,
+  cookingIdle,
   cookingCooldown,
   cookingInvald = 255
 } cookingState;
@@ -37,6 +40,7 @@ void updateCookingStateMachine(void);
 cookingState getCookingState(void);
 void requestPizzaOvenStart(void);
 void requestPizzaOvenStop(void);
+void setDomeState(uint8_t state);
 
 #endif // COOKING_STATE_MACHINE_H
  
