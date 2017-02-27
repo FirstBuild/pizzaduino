@@ -70,6 +70,7 @@ static FSM poStateMachine = FSM(stateStandby);     //initialize state machine, s
 void requestPizzaOvenStart(void)
 {
   pizzaOvenStartRequested = true;
+  domeOn = true;
 }
 
 void requestPizzaOvenStop(void)
@@ -119,6 +120,10 @@ cookingState getCookingState(void)
   else if (poStateMachine.isInState(stateCoolDown))
   {
     state = cookingCooldown;
+  }
+  else if (poStateMachine.isInState(stateIdle))
+  {
+    state = cookingIdle;
   }
   
   return state;
@@ -284,17 +289,22 @@ static void statePreheatStage1Update()
     poStateMachine.transitionTo(stateCoolDown);
     return;
   }
-
-  if (!domeOn)
-  {
-    poStateMachine.transitionTo(stateIdle);
-    return;
-  }
   
-  if (((lowerFrontHeater.parameter.tempSetPointHighOff - lowerFrontHeater.thermocouple) < preheatStage1TerminationDelta) &&
-      ((lowerRearHeater.parameter.tempSetPointHighOff - lowerRearHeater.thermocouple) < preheatStage1TerminationDelta))
+  if (domeOn)
   {
-    poStateMachine.transitionTo(statePreheatStage2);
+    if (((lowerFrontHeater.parameter.tempSetPointHighOff - lowerFrontHeater.thermocouple) < preheatStage1TerminationDelta) &&
+        ((lowerRearHeater.parameter.tempSetPointHighOff - lowerRearHeater.thermocouple) < preheatStage1TerminationDelta))
+    {    
+      poStateMachine.transitionTo(statePreheatStage2);
+    }
+  }
+  else
+  {
+    if (((lowerFrontHeater.thermocouple >= lowerFrontHeater.parameter.tempSetPointLowOn)) &&
+        ((lowerRearHeater.thermocouple >= lowerRearHeater.parameter.tempSetPointLowOn)))
+    {    
+      poStateMachine.transitionTo(stateIdle);
+    }
   }
 }
 
@@ -521,6 +531,7 @@ static void stateIdleUpdate()
 
   if (!tcoAndFan.areOk())
   {
+    Serial.println(F("Fans are not ok, transitioning to standby"));
     poStateMachine.transitionTo(stateStandby);
     return;
   }
@@ -556,6 +567,7 @@ static void stateIdleUpdate()
 
   if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
   {
+    Serial.println(F("Transitioning to cooldown from idle..."));
     poStateMachine.transitionTo(stateCoolDown);
     return;
   }

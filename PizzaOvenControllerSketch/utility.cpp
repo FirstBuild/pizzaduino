@@ -59,8 +59,8 @@ void printHeaterTemperatureParameters(const char *pName, uint16_t *pParams)
   // 1234567890123456789012345678901234567890
   // UR -12345 -12345 -12345 -12345
   uint8_t i;
-  uint8_t msg[33];
-  uint8_t buf[7];
+  char msg[33];
+  char buf[7];
 
   strcpy_P(msg, pName);
   for (i = 0; i < 4; i++)
@@ -69,45 +69,45 @@ void printHeaterTemperatureParameters(const char *pName, uint16_t *pParams)
     strcat((char *)msg, (const char *)buf);
     strcat((char *)msg, " ");
   }
-  serialCommWrapperSendMessage(msg, (uint8_t)strlen((const char *)msg));
+  serialCommWrapperSendMessage((uint8_t *)&msg[0], (uint8_t)strlen((const char *)msg));
 }
 
-void printMessageWithTwoUints(uint8_t * pText, uint16_t uint1, uint16_t uint2)
+void printMessageWithTwoUints(const uint8_t * pText, uint16_t uint1, uint16_t uint2)
 {
   // 0000000001111111111222222222233333333334
   // 1234567890123456789012345678901234567890
   // message text goes here nnnnn 12345 12345
-  uint8_t msg[40];
-  uint8_t buf[7];
+  char msg[40];
+  char buf[7];
 
-  if (strlen_P(pText) >= sizeof(msg) - 12)
+  if (strlen_P((const char *)pText) >= sizeof(msg) - 12)
   {
     Serial.println(F("DEBUG: Message is too long to pring."));    
   }
   
-  strcpy_P(msg, pText);
+  strcpy_P(msg, (const char *)pText);
   itoa(uint1, buf, 10);
   strcat(msg, buf);
   strcat(msg, " ");
   itoa(uint2, buf, 10);
   strcat(msg, buf);
-  serialCommWrapperSendMessage(msg, strlen(msg));
+  serialCommWrapperSendMessage((uint8_t *)&msg[0], strlen(msg));
 }
 
-void printPidGains(uint8_t * pText, PID *pPid)
+void printPidGains(const uint8_t * pText, PID *pPid)
 {
   // 0000000001111111111222222222233333333334
   // 1234567890123456789012345678901234567890
   // UFG 123.1234567 123.1234567 123.1234567 
-  uint8_t msg[43];
+  char msg[43];
 
-  strcpy_P(msg, pText);
-  ftoa(pPid->GetKp(), &msg[strlen(msg)], 7);
+  strcpy_P(msg, (const char *)pText);
+  ftoa(pPid->GetKp(), (uint8_t *)&msg[strlen(msg)], 7);
   strcat(msg, " ");
-  ftoa(pPid->GetKi(), &msg[strlen(msg)], 7);
+  ftoa(pPid->GetKi(), (uint8_t *)&msg[strlen(msg)], 7);
   strcat(msg, " ");
-  ftoa(pPid->GetKd(), &msg[strlen(msg)], 7);
-  serialCommWrapperSendMessage(msg, strlen(msg));
+  ftoa(pPid->GetKd(), (uint8_t *)&msg[strlen(msg)], 7);
+  serialCommWrapperSendMessage((uint8_t *)&msg[0], strlen(msg));
 }
 
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf)

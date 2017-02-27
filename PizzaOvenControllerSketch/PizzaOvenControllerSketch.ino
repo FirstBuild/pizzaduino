@@ -63,7 +63,7 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   1
-#define FIRMWARE_BUILD_VERSION   6
+#define FIRMWARE_BUILD_VERSION   7
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -230,13 +230,13 @@ void readThermocouples(void)
   }
 
   upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT), upperFrontHeater.thermocouple, 57.0)); // 57.0
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT), upperFrontHeater.thermocouple, 250.0)); // 57.0
   upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_REAR), upperRearHeater.thermocouple, 57.0));
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_REAR), upperRearHeater.thermocouple, 250.0));
   lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT), lowerFrontHeater.thermocouple, 4.4)); // 4.4
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT), lowerFrontHeater.thermocouple, 250.0)); // 4.4
   lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_REAR), lowerRearHeater.thermocouple, 4.4));
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_REAR), lowerRearHeater.thermocouple, 250.0));
 
   ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
   urTcLimit.checkLimit(upperRearHeater.thermocouple);
@@ -369,12 +369,12 @@ void outputAcInputStates(void)
   //                                            0123456789012345678901234567890
   static const uint8_t msgTemplate[] PROGMEM = "Power 7 L2DLB 8 TCO 9 AC 3";
   uint8_t msg[28];
-  strcpy_P(&msg[0], &msgTemplate[0]);
+  strcpy_P((char *)&msg[0], (const char *)&msgTemplate[0]);
   msg[6]  = powerButtonIsOn() ? '1' : '0';
   msg[14] = sailSwitchIsOn() ? '1' : '0';
   msg[20] = tcoInputIsOn() ? '1' : '0';
   msg[25] = acPowerIsPresent() ? '1' : '0';
-  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  serialCommWrapperSendMessage(&msg[0], strlen((const char *)&msg[0]));
 }
 
 void outputDoorStatus(void)
@@ -383,10 +383,10 @@ void outputDoorStatus(void)
   //                                            0123456789012345678901234567890
   static const uint8_t msgTemplate[] PROGMEM = "Door 7 Count 65535";
   uint8_t msg[22];
-  strcpy_P(&msg[0], &msgTemplate[0]);
+  strcpy_P((char *)&msg[0], (char *)&msgTemplate[0]);
   msg[5] = '0' + (doorInput.IsActive() ? 1 : 0);
-  itoa(doorDeployCount, &msg[13], 10);
-  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  itoa(doorDeployCount, (char *)&msg[13], 10);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
 void outputTemps(void)
@@ -404,19 +404,19 @@ void outputTemps(void)
   intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
   
   msg[0] = 0;
-  strcat(msg, "Temps ");
-  itoa(intTempCUF, buf, 10);
-  strcat(msg, buf);
-  strcat(msg, " ");
-  itoa(intTempCUR, buf, 10);
-  strcat(msg, buf);
-  strcat(msg, " ");
-  itoa(intTempCLF, buf, 10);
-  strcat(msg, buf);
-  strcat(msg, " ");
-  itoa(intTempCLR, buf, 10);
-  strcat(msg, buf);
-  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  strcat((char *)&msg[0], "Temps ");
+  itoa(intTempCUF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCUR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
 void outputCookingState(void)
@@ -434,28 +434,28 @@ void outputCookingState(void)
   switch (getCookingState())
   {
     case cookingStandby:
-      strcpy_P(msg, msgStandby);
+      strcpy_P((char *)&msg[0], (char *)&msgStandby[0]);
       break;
     case cookingWaitForDlb:
-      strcpy_P(msg, msgDlb);
+      strcpy_P((char *)&msg[0], (char *)&msgDlb[0]);
       break;
     case cookingPreheatStage1:
-      strcpy_P(msg, msgPreheat1);
+      strcpy_P((char *)&msg[0], (char *)&msgPreheat1[0]);
       break;
     case cookingPreheatStage2:
-      strcpy_P(msg, msgPreheat2);
+      strcpy_P((char *)&msg[0], (char *)&msgPreheat2[0]);
       break;
     case cookingCooking:
-      strcpy_P(msg, msgCooking);
+      strcpy_P((char *)&msg[0], (char *)&msgCooking[0]);
       break;
     case cookingIdle:
-      strcpy_P(msg, msgStandbyBottom);
+      strcpy_P((char *)&msg[0], (char *)&msgStandbyBottom[0]);
       break;
     case cookingCooldown:
-      strcpy_P(msg, msgCooldown);
+      strcpy_P((char *)&msg[0], (char *)&msgCooldown[0]);
       break;
   }
-  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
 void outputFailures(void)
@@ -476,57 +476,57 @@ void outputFailures(void)
   
   if(tcoAndFan.tcoHasFailed())
   {
-    strcpy_P(msg, msgTcoFailure);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgTcoFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }
   if(tcoAndFan.coolingFanHasFailed())
   {
-    strcpy_P(msg, msgCoolingFanFailure);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgCoolingFanFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }
   if (watchdogResetOccurred != 0)
   {
-    strcpy_P(msg, msgWatchdogReset);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgWatchdogReset[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   if (ufTcTempLimitFailed != 0)
   {
-    strcpy_P(msg, msgUfTcOvertempFailure);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgUfTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   
   if (urTcTempLimitFailed != 0)
   {
-    strcpy_P(msg, msgUrTcOvertempFailure);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgUrTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   
   if (lfTcTempLimitFailed != 0)
   {
-    strcpy_P(msg, msgLfTcOvertempFailure);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgLfTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   
   if (lrTcTempLimitFailed != 0)
   {
-    strcpy_P(msg, msgLrTcOvertempFailure);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgLrTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
 
   if (upperTempDiffExceeded)
   {
-    strcpy_P(msg, msgUpperDiffExceeded);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgUpperDiffExceeded[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   if (lowerTempDiffExceeded)
   {
-    strcpy_P(msg, msgLowerDiffExceeded);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (char *)&msgLowerDiffExceeded[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   if (doorInput.IsActive())
   {
-    strcpy_P(msg, msgDoorDropped);
-    serialCommWrapperSendMessage(msg, strlen(msg));  
+    strcpy_P((char *)&msg[0], (const char *)&msgDoorDropped[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }
 
 /*
@@ -561,13 +561,13 @@ void outputRelayStates(void)
   //                                            0123456789012345678901234567890
   static const uint8_t msgTemplate[] PROGMEM = "Relays 1 2 3 4";
   uint8_t msg[18];
-  strcpy_P(&msg[0], &msgTemplate[0]);
+  strcpy_P((char *)&msg[0], (const char *)&msgTemplate[0]);
   msg[7] = '0' + digitalRead(HEATER_TRIAC_UPPER_FRONT);
   msg[9] = '0' + digitalRead(HEATER_TRIAC_UPPER_REAR);
   msg[11] = '0' + digitalRead(HEATER_RELAY_LOWER_FRONT);
   msg[13] = '0' + digitalRead(HEATER_RELAY_LOWER_REAR);
   
-  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
 void outputPidDutyCycles(void)
@@ -576,11 +576,11 @@ void outputPidDutyCycles(void)
   // 0123456789012345678901234567890
   // PidDC 100.0000000 100.0000000
   uint8_t msg[35];
-  strcpy(msg, "PidDC ");
-  ftoa(upperFrontPidIo.Output, &msg[strlen(msg)], 7);
-  strcat(msg, " ");
-  ftoa(upperRearPidIo.Output, &msg[strlen(msg)], 7);
-  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  strcpy((char *)&msg[0], "PidDC ");
+  ftoa(upperFrontPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
+  strcat((char *)&msg[0], " ");
+  ftoa(upperRearPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
 void outputTimeInfo(void)
@@ -592,13 +592,13 @@ void outputTimeInfo(void)
   uint8_t buf[15];
   
   msg[0] = 0;
-  strcat(msg, "Time: ");
-  ultoa(relayTimeBase, buf, 10);
-  strcat(msg, buf);
-  strcat(msg, ", thresh: ");
-  ultoa(lowerRearHeater.heaterCountsOn, buf, 10);
-  strcat(msg, buf);
-  serialCommWrapperSendMessage(&msg[0], strlen(msg));
+  strcat((char *)&msg[0], "Time: ");
+  ultoa(relayTimeBase, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], ", thresh: ");
+  ultoa(lowerRearHeater.heaterCountsOn, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (const char *)&buf[0]);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
 void PeriodicOutputInfo()
@@ -860,7 +860,7 @@ void setup()
   }
 
   serialCommWrapperInit(sendSerialByte, handleIncomingMessage);
-  handleIncomingMessage("v", 1);
+  handleIncomingMessage((uint8_t *)"v", 1);
   
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
@@ -945,7 +945,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
   uint8_t lastByteReceived;
   PID *pPid = NULL;
   uint8_t heaterIndex;
-  uint8_t * pText;
+  const uint8_t * pText;
   // Messages
   // 0000000001111111111222222222233333333334444444444555555555566666666667
   // 1234567890123456789012345678901234567890123456789012345678901234567890
@@ -981,10 +981,12 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
             switch (receivedCommandBuffer[1])
             {
               case '0' :
-                setDomeState('0');
+                Serial.println(F("DEBUG Setting dome off."));
+                setDomeState(0);
                 break;
               case '1' :
-                setDomeState('1');
+                Serial.println(F("DEBUG Setting dome on."));
+                setDomeState(1);
                 break;
               default:
                 Serial.print(F("DEBUG unknown command received for the 'd' command: "));
@@ -995,8 +997,6 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
             receivedCommandBufferIndex = 0;
           }
           break;
-          Serial.println(F("DEBUG Pizza oven idle requested."));
-          break;
 
         case 'q': // Quit Pizza Oven Cycle
           requestPizzaOvenStop();
@@ -1006,7 +1006,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
           break;
 
         case 'v': // query protocol version
-          serialCommWrapperSendMessage(versionString, strlen(versionString));
+          serialCommWrapperSendMessage((uint8_t *)&versionString[0], strlen(versionString));
           receivedCommandBufferIndex = 0;
           break;
 
@@ -1020,19 +1020,19 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 printMessageWithTwoUints(nTimesText, triacPeriodSeconds, relayPeriodSeconds); 
                 break;
               case '1' :
-                static const uint8_t ufText[] PROGMEM = "UF ";
+                static const char ufText[] PROGMEM = "UF ";
                 printHeaterTemperatureParameters(ufText, upperFrontHeater.parameter.parameterArray);
                 break;
               case '2' :
-                static const uint8_t urText[] PROGMEM = "UR ";
+                static const char urText[] PROGMEM = "UR ";
                 printHeaterTemperatureParameters(urText, upperRearHeater.parameter.parameterArray);
                 break;
               case '3' :
-                static const uint8_t lfText[] PROGMEM = "LF ";
+                static const char lfText[] PROGMEM = "LF ";
                 printHeaterTemperatureParameters(lfText, lowerFrontHeater.parameter.parameterArray);
                 break;
               case '4' :
-                static const uint8_t lrText[] PROGMEM = "LR ";
+                static const char lrText[] PROGMEM = "LR ";
                 printHeaterTemperatureParameters(lrText, lowerRearHeater.parameter.parameterArray);
                 break;
               default:
@@ -1059,7 +1059,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
               {
                 Serial.println(F("DEBUG Setting lower setpoint."));
                 GetInputValue(&pHeater->parameter.tempSetPointLowOn, &receivedCommandBuffer[2]);
-                if (&pHeater->parameter.tempSetPointLowOn > maxTempSetting[heaterIndex])
+                if (pHeater->parameter.tempSetPointLowOn > maxTempSetting[heaterIndex])
                 {
                   pHeater->parameter.tempSetPointLowOn = maxTempSetting[heaterIndex];
                 }
@@ -1068,7 +1068,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
               {
                 Serial.println(F("DEBUG Setting upper setpoint."));
                 GetInputValue(&pHeater->parameter.tempSetPointHighOff, &receivedCommandBuffer[2]);
-                if (&pHeater->parameter.tempSetPointHighOff > maxTempSetting[heaterIndex])
+                if (pHeater->parameter.tempSetPointHighOff > maxTempSetting[heaterIndex])
                 {
                   pHeater->parameter.tempSetPointHighOff = maxTempSetting[heaterIndex];
                 }
