@@ -17,6 +17,7 @@ static uint32_t currentTriacTimerCounter, oldTriacTimerCounter;
 static uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 static float preheatStage1TerminationDelta = 150.0;
 static bool domeOn = true;
+static bool setpointIncreaseOccurred = false;
 
 #ifdef USE_PID
 // PID stuff
@@ -81,6 +82,11 @@ void requestPizzaOvenStop(void)
 void setDomeState(uint8_t state)
 {
   domeOn = (state == 1) ? true : false;
+}
+
+void theSetpointWasIncreased(void)
+{
+  setpointIncreaseOccurred = true;
 }
 
 void initCookingStateMachine(void)
@@ -194,14 +200,7 @@ static void stateWaitForDlbUpdate(void)
   }
   else if (sailSwitchIsOn() && tcoInputIsOn())
   {
-    if (domeOn)
-    {
-      poStateMachine.transitionTo(statePreheatStage1);    
-    }
-    else
-    {
-      poStateMachine.transitionTo(stateIdle);    
-    }
+    poStateMachine.transitionTo(statePreheatStage1);    
   } 
 }
 
@@ -241,6 +240,7 @@ static void statePreheatStage1Enter()
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   triacTimeBase = 0;
   relayTimeBase = 0;
+  setpointIncreaseOccurred = false;
 }
 
 static void statePreheatStage1Update()
@@ -507,6 +507,13 @@ static void stateHeatCycleUpdate()
     poStateMachine.transitionTo(stateIdle);
     return;
   }
+
+  if (setpointIncreaseOccurred)
+  {
+    setpointIncreaseOccurred = false;
+    poStateMachine.transitionTo(statePreheatStage1);
+    return;
+  }
 }
 
 static void stateHeatCycleExit()
@@ -576,6 +583,13 @@ static void stateIdleUpdate()
   if (pizzaOvenStartRequested)
   {
     domeOn = true;
+    poStateMachine.transitionTo(statePreheatStage1);
+    return;
+  }
+
+  if (setpointIncreaseOccurred)
+  {
+    setpointIncreaseOccurred = false;
     poStateMachine.transitionTo(statePreheatStage1);
     return;
   }

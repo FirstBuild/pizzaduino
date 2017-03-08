@@ -946,6 +946,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
   PID *pPid = NULL;
   uint8_t heaterIndex;
   const uint8_t * pText;
+  uint16_t newSetpoint;
   // Messages
   // 0000000001111111111222222222233333333334444444444555555555566666666667
   // 1234567890123456789012345678901234567890123456789012345678901234567890
@@ -1055,23 +1056,30 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
             {
               heaterIndex = (receivedCommandBuffer[1] - '0')-1;
               pHeater = aHeaters[heaterIndex];
+              
+              GetInputValue(&newSetpoint, &receivedCommandBuffer[2]);
+              if (newSetpoint > maxTempSetting[heaterIndex])
+              {
+                newSetpoint = maxTempSetting[heaterIndex];
+              }
+              
               if (receivedCommandBuffer[0] == 'l')
               {
                 Serial.println(F("DEBUG Setting lower setpoint."));
-                GetInputValue(&pHeater->parameter.tempSetPointLowOn, &receivedCommandBuffer[2]);
-                if (pHeater->parameter.tempSetPointLowOn > maxTempSetting[heaterIndex])
+                if (newSetpoint > pHeater->parameter.tempSetPointLowOn)
                 {
-                  pHeater->parameter.tempSetPointLowOn = maxTempSetting[heaterIndex];
+                  theSetpointWasIncreased();
                 }
+                pHeater->parameter.tempSetPointLowOn = newSetpoint;
               }
               else
               {
                 Serial.println(F("DEBUG Setting upper setpoint."));
-                GetInputValue(&pHeater->parameter.tempSetPointHighOff, &receivedCommandBuffer[2]);
-                if (pHeater->parameter.tempSetPointHighOff > maxTempSetting[heaterIndex])
+                if (newSetpoint > pHeater->parameter.tempSetPointHighOff)
                 {
-                  pHeater->parameter.tempSetPointHighOff = maxTempSetting[heaterIndex];
+                  theSetpointWasIncreased();
                 }
+                pHeater->parameter.tempSetPointHighOff = newSetpoint;
               }
               saveParametersToMemory();
             }
