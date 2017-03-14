@@ -28,6 +28,6 @@
 
 #define COOL_DOWN_EXIT_TEMP    ((double)425.0)
 #define MAX_UPPER_TEMP (1300)
-#define MAX_LOWER_TEMP (800)
+#define MAX_LOWER_TEMP (805)
 
 #endif /* CONFIG_H_ */
