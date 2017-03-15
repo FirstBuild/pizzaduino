@@ -34,6 +34,10 @@ typedef enum {
   cookingInvald = 255
 } cookingState;
 
+typedef enum {
+  stoneSetpointIncreased,
+  domeSetpointIncreased
+} thisSetpointIncreased;
 
 void initCookingStateMachine(void);
 void updateCookingStateMachine(void);
@@ -41,7 +45,7 @@ cookingState getCookingState(void);
 void requestPizzaOvenStart(void);
 void requestPizzaOvenStop(void);
 void setDomeState(uint8_t state);
-void theSetpointWasIncreased(void);
+void theSetpointWasIncreased(thisSetpointIncreased which);
 
 #endif // COOKING_STATE_MACHINE_H
  

@@ -1068,7 +1068,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 Serial.println(F("DEBUG Setting lower setpoint."));
                 if (newSetpoint > pHeater->parameter.tempSetPointLowOn)
                 {
-                  theSetpointWasIncreased();
+                  theSetpointWasIncreased(stoneSetpointIncreased);
                 }
                 pHeater->parameter.tempSetPointLowOn = newSetpoint;
               }
@@ -1077,7 +1077,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 Serial.println(F("DEBUG Setting upper setpoint."));
                 if (newSetpoint > pHeater->parameter.tempSetPointHighOff)
                 {
-                  theSetpointWasIncreased();
+                  theSetpointWasIncreased(domeSetpointIncreased);
                 }
                 pHeater->parameter.tempSetPointHighOff = newSetpoint;
               }

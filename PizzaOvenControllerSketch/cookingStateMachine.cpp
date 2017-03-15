@@ -18,6 +18,7 @@ static uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 static float preheatStage1TerminationDelta = 150.0;
 static bool domeOn = true;
 static bool setpointIncreaseOccurred = false;
+static bool stoneIsPreheated = false;
 
 #ifdef USE_PID
 // PID stuff
@@ -84,9 +85,14 @@ void setDomeState(uint8_t state)
   domeOn = (state == 1) ? true : false;
 }
 
-void theSetpointWasIncreased(void)
+void theSetpointWasIncreased(thisSetpointIncreased which)
 {
   setpointIncreaseOccurred = true;
+
+  if (which == stoneSetpointIncreased)
+  {
+    stoneIsPreheated = false;
+  }
 }
 
 void initCookingStateMachine(void)
@@ -167,6 +173,7 @@ static void stateStandbyUpdate()
 
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
+  stoneIsPreheated = false;
 }
 
 static void stateStandbyExit()
@@ -300,9 +307,10 @@ static void statePreheatStage1Update()
   }
   else
   {
-    if (((lowerFrontHeater.thermocouple >= lowerFrontHeater.parameter.tempSetPointLowOn)) &&
-        ((lowerRearHeater.thermocouple >= lowerRearHeater.parameter.tempSetPointLowOn)))
-    {    
+    if (((lowerFrontHeater.thermocouple >= lowerFrontHeater.parameter.tempSetPointLowOn) &&
+        (lowerRearHeater.thermocouple >= lowerRearHeater.parameter.tempSetPointLowOn)) || stoneIsPreheated)
+    {
+      stoneIsPreheated = true;
       poStateMachine.transitionTo(stateIdle);
     }
   }
@@ -402,11 +410,12 @@ static void statePreheatStage2Update()
     return;
   }
 
-  if ((lowerFrontHeater.thermocouple >= (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn)/2) &&
-      ( lowerRearHeater.thermocouple >= (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn)/2) &&
-      (upperFrontHeater.thermocouple >= (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2) &&
-      ( upperRearHeater.thermocouple >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2))
+  if ((((lowerFrontHeater.thermocouple >= (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn)/2) &&
+      (  lowerRearHeater.thermocouple >= (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn)/2)) || stoneIsPreheated) &&
+      ( upperFrontHeater.thermocouple >= (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2) &&
+      (  upperRearHeater.thermocouple >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2))
   {
+    stoneIsPreheated = true;
     poStateMachine.transitionTo(stateHeatCycle);
   }
 }
