@@ -42,15 +42,15 @@ static void stateWaitForDlbUpdate();
 static void stateWaitForDlbExit();
 static State stateWaitForDlb = State(stateWaitForDlbEnter, stateWaitForDlbUpdate, stateWaitForDlbExit);
 
-static void statePreheatStage1Enter();
-static void statePreheatStage1Update();
-static void statePreheatStage1Exit();
-static State statePreheatStage1 = State(statePreheatStage1Enter, statePreheatStage1Update, statePreheatStage1Exit);
+static void statePreheatStoneOnlyEnter();
+static void statePreheatStoneOnlyUpdate();
+static void statePreheatStoneOnlyExit();
+static State statePreheatStoneOnly = State(statePreheatStoneOnlyEnter, statePreheatStoneOnlyUpdate, statePreheatStoneOnlyExit);
 
-static void statePreheatStage2Enter();
-static void statePreheatStage2Update();
-static void statePreheatStage2Exit();
-static State statePreheatStage2 = State(statePreheatStage2Enter, statePreheatStage2Update, statePreheatStage2Exit);
+static void statePreheatEnter();
+static void statePreheatUpdate();
+static void statePreheatExit();
+static State statePreheat = State(statePreheatEnter, statePreheatUpdate, statePreheatExit);
 
 static void stateHeatCycleEnter();
 static void stateHeatCycleUpdate();
@@ -117,13 +117,13 @@ cookingState getCookingState(void)
   {
     state = cookingWaitForDlb;
   }
-  else if (poStateMachine.isInState(statePreheatStage1))
+  else if (poStateMachine.isInState(statePreheatStoneOnly))
   {
-    state = cookingPreheatStage1;
+    state = cookingPreheatStoneOnly;
   }
-  else if (poStateMachine.isInState(statePreheatStage2))
+  else if (poStateMachine.isInState(statePreheat))
   {
-    state = cookingPreheatStage2;
+    state = cookingPreheat;
   }
   else if (poStateMachine.isInState(stateHeatCycle))
   {
@@ -207,7 +207,14 @@ static void stateWaitForDlbUpdate(void)
   }
   else if (sailSwitchIsOn() && tcoInputIsOn())
   {
-    poStateMachine.transitionTo(statePreheatStage1);    
+    if (domeOn == true)
+    {
+      poStateMachine.transitionTo(statePreheat);    
+    }
+    else
+    {
+      poStateMachine.transitionTo(statePreheatStoneOnly);    
+    }
   } 
 }
 
@@ -236,13 +243,13 @@ double getURSeedValue(double t)
 }
 
 //------------------------------------------
-//state machine statePreheatState1
+//state machine statePreheatStoneOnly
 //------------------------------------------
-// State statePreheatStage1 = State(statePreheatStage1Enter, statePreheatStage1Update, statePreheatStage1Exit);
+// State statePreheatStage1 = State(statePreheatStoneOnlyEnter, statePreheatStoneOnlyUpdate, statePreheatStoneOnlyExit);
 
-static void statePreheatStage1Enter()
+static void statePreheatStoneOnlyEnter()
 {
-  Serial.println(F("DEBUG entering preheat stage 1"));
+  Serial.println(F("DEBUG entering preheat stone only"));
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   triacTimeBase = 0;
@@ -250,7 +257,7 @@ static void statePreheatStage1Enter()
   setpointIncreaseOccurred = false;
 }
 
-static void statePreheatStage1Update()
+static void statePreheatStoneOnlyUpdate()
 {
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
@@ -299,11 +306,7 @@ static void statePreheatStage1Update()
   
   if (domeOn)
   {
-    if (((lowerFrontHeater.parameter.tempSetPointHighOff - lowerFrontHeater.thermocouple) < preheatStage1TerminationDelta) &&
-        ((lowerRearHeater.parameter.tempSetPointHighOff - lowerRearHeater.thermocouple) < preheatStage1TerminationDelta))
-    {    
-      poStateMachine.transitionTo(statePreheatStage2);
-    }
+    poStateMachine.transitionTo(statePreheat);
   }
   else
   {
@@ -316,19 +319,19 @@ static void statePreheatStage1Update()
   }
 }
 
-static void statePreheatStage1Exit()
+static void statePreheatStoneOnlyExit()
 {
-  Serial.println(F("DEBUG Exiting preheat stage 1"));
+  Serial.println(F("DEBUG Exiting preheat stone only"));
 }
 
 //------------------------------------------
-//state machine statePreheatStage2
+//state machine statePreheat
 //------------------------------------------
-// State statePreheatStage2 = State(statePreheatStage2Enter, statePreheatStage2Update, statePreheatStage2Exit);
+// State statePreheat = State(statePreheatEnter, statePreheatUpdate, statePreheatExit);
 
-static void statePreheatStage2Enter()
+static void statePreheatEnter()
 {
-  Serial.println(F("DEBUG entering preheat stage 2"));
+  Serial.println(F("DEBUG entering preheat"));
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   triacTimeBase = 0;
@@ -345,7 +348,7 @@ static void statePreheatStage2Enter()
   upperRearPID.SetMode(AUTOMATIC);
 }
 
-static void statePreheatStage2Update()
+static void statePreheatUpdate()
 {
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
@@ -406,7 +409,7 @@ static void statePreheatStage2Update()
 
   if (!domeOn)
   {
-    poStateMachine.transitionTo(stateIdle);
+    poStateMachine.transitionTo(statePreheatStoneOnly);
     return;
   }
 
@@ -420,9 +423,9 @@ static void statePreheatStage2Update()
   }
 }
 
-static void statePreheatStage2Exit()
+static void statePreheatExit()
 {
-  Serial.println(F("DEBUG Exiting preheat stage 2"));
+  Serial.println(F("DEBUG Exiting preheat"));
 }
 
 //------------------------------------------
@@ -520,7 +523,7 @@ static void stateHeatCycleUpdate()
   if (setpointIncreaseOccurred)
   {
     setpointIncreaseOccurred = false;
-    poStateMachine.transitionTo(statePreheatStage1);
+    poStateMachine.transitionTo(statePreheat);
     return;
   }
 }
@@ -592,14 +595,21 @@ static void stateIdleUpdate()
   if (pizzaOvenStartRequested)
   {
     domeOn = true;
-    poStateMachine.transitionTo(statePreheatStage1);
+    poStateMachine.transitionTo(statePreheat);
     return;
   }
 
   if (setpointIncreaseOccurred)
   {
     setpointIncreaseOccurred = false;
-    poStateMachine.transitionTo(statePreheatStage1);
+    if (domeOn == true)
+    {
+      poStateMachine.transitionTo(statePreheat);
+    }
+    else
+    {
+      poStateMachine.transitionTo(statePreheatStoneOnly);
+    }
     return;
   }
 }

@@ -62,8 +62,8 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 // Macros
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
-#define FIRMWARE_MINOR_VERSION   1
-#define FIRMWARE_BUILD_VERSION   9
+#define FIRMWARE_MINOR_VERSION   2
+#define FIRMWARE_BUILD_VERSION   0
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -425,8 +425,8 @@ void outputCookingState(void)
   //                                            0123456789012345678901234567890
   static const uint8_t msgStandby[]  PROGMEM = "State Standby";
   static const uint8_t msgDlb[]      PROGMEM = "State DLB";
-  static const uint8_t msgPreheat1[] PROGMEM = "State Preheat1";
-  static const uint8_t msgPreheat2[] PROGMEM = "State Preheat2";
+  static const uint8_t msgPreheat[] PROGMEM = "State Preheat";
+  static const uint8_t msgPreheatStoneOnly[] PROGMEM = "State PreheatStoneOnly";
   static const uint8_t msgCooking[]  PROGMEM = "State Cooking";
   static const uint8_t msgStandbyBottom[]  PROGMEM = "State Idle";
   static const uint8_t msgCooldown[] PROGMEM = "State Cooldown";
@@ -439,11 +439,11 @@ void outputCookingState(void)
     case cookingWaitForDlb:
       strcpy_P((char *)&msg[0], (char *)&msgDlb[0]);
       break;
-    case cookingPreheatStage1:
-      strcpy_P((char *)&msg[0], (char *)&msgPreheat1[0]);
+    case cookingPreheat:
+      strcpy_P((char *)&msg[0], (char *)&msgPreheat[0]);
       break;
-    case cookingPreheatStage2:
-      strcpy_P((char *)&msg[0], (char *)&msgPreheat2[0]);
+    case cookingPreheatStoneOnly:
+      strcpy_P((char *)&msg[0], (char *)&msgPreheatStoneOnly[0]);
       break;
     case cookingCooking:
       strcpy_P((char *)&msg[0], (char *)&msgCooking[0]);

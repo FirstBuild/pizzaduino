@@ -26,8 +26,8 @@
 typedef enum {
   cookingStandby,
   cookingWaitForDlb,
-  cookingPreheatStage1,
-  cookingPreheatStage2,
+  cookingPreheat,
+  cookingPreheatStoneOnly,
   cookingCooking,
   cookingIdle,
   cookingCooldown,
