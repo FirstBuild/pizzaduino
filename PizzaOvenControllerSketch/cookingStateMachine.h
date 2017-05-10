@@ -45,6 +45,7 @@ cookingState getCookingState(void);
 void requestPizzaOvenStart(void);
 void requestPizzaOvenStop(void);
 void setDomeState(uint8_t state);
+uint8_t getDomeState(void);
 void theSetpointWasIncreased(thisSetpointIncreased which);
 
 #endif // COOKING_STATE_MACHINE_H

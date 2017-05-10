@@ -389,6 +389,24 @@ void outputDoorStatus(void)
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
+void outputDomeState(void)
+{
+  //                                           0000000000111111111122222222223
+  //                                           0123456789012345678901234567890
+  static const uint8_t msgDomeOn[]  PROGMEM = "Dome On";
+  static const uint8_t msgDomeOff[] PROGMEM = "Dome Off";
+  uint8_t msg[20];
+  if(getDomeState())
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgDomeOn[0]);
+  }
+  else
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgDomeOff[0]);
+  }
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
+
 void outputTemps(void)
 {
   uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
@@ -634,6 +652,10 @@ void PeriodicOutputInfo()
       outputTimeInfo();
       printPhase++;
     break;
+    case 2:
+      outputDomeState();
+      printPhase++;
+      break;
     
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
@@ -925,6 +947,7 @@ void setup()
    Serial commands prefixes:
 
    d - set dome on or off
+   D - get dome state
    f - set off percent
    g - set pid gains
    G - get the pid gains
@@ -976,7 +999,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
           Serial.println(F("DEBUG Pizza oven start requested."));
           break;
 
-        case 'd':  // Go to idle
+        case 'd':  // Set dome state
           if (receivedCommandBufferIndex >= 2)
           {
             switch (receivedCommandBuffer[1])
@@ -997,6 +1020,11 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
 
             receivedCommandBufferIndex = 0;
           }
+          break;
+
+        case 'D':  // get dome state
+          outputDomeState();
+          receivedCommandBufferIndex = 0;
           break;
 
         case 'q': // Quit Pizza Oven Cycle

@@ -85,6 +85,11 @@ void setDomeState(uint8_t state)
   domeOn = (state == 1) ? true : false;
 }
 
+uint8_t getDomeState(void)
+{
+  return domeOn ? 1 : 0;
+}
+
 void theSetpointWasIncreased(thisSetpointIncreased which)
 {
   setpointIncreaseOccurred = true;
