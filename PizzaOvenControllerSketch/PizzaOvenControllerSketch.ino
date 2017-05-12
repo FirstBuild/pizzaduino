@@ -9,7 +9,7 @@
   furnished to do so, subject to the following conditions:
 
   The above copyright notice and this permission notice shall be included in
-  all copies or substantial portions of the Software.
+  all copies or substantial portions of the Software.f
 
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -546,31 +546,6 @@ void outputFailures(void)
     strcpy_P((char *)&msg[0], (const char *)&msgDoorDropped[0]);
     serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }
-
-/*
-  Serial.print(F("UF limit: "));
-  Serial.println(ufTcLimit.m_limit);
-  Serial.print(F("UF timeout: "));
-  Serial.println(ufTcLimit.m_timeout);
-  Serial.print(F("UF startTime: "));
-  Serial.println(ufTcLimit.m_startTime);
-  Serial.print(F("UF timer started: "));
-  Serial.println(ufTcLimit.m_timerStarted);
-  Serial.print(F("UF limit failure: "));
-  Serial.println(ufTcLimit.m_limitFailure);
-  Serial.print(F("Some TC has failed: "));
-  Serial.println(SOME_TC_HAS_FAILED);
-  Serial.print(F("All TCs OK: "));
-  Serial.println(ALL_TCS_OK);
-  Serial.print(F("upperTempDiffExceeded: "));
-  Serial.println(upperTempDiffExceeded);
-  Serial.print(F("lowerTempDiffExceeded: "));
-  Serial.println(lowerTempDiffExceeded);
-  Serial.print(F("TEMP_DIFFS_OK: "));
-  Serial.println(TEMP_DIFFS_OK);
-  Serial.print(F("TEMP_DIFF_FAIL: "));
-  Serial.println(TEMP_DIFF_FAIL);
-  */
 }
 
 void outputRelayStates(void)
