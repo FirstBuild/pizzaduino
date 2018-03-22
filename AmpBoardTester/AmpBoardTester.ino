@@ -49,6 +49,8 @@
 #include <Wire.h>
 #include <SeeedGrayOLED.h>
 #include "DigitalInputDebounced.h"
+#include "serialCommWrapper.h"
+#include "crc.h"
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffff)
@@ -59,7 +61,10 @@
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   1
+#define FIRMWARE_BUILD_VERSION   2
+
+const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
+
 #define RESET_LINE 0
 #define RESET_TEXT "Reset : "
 
@@ -79,17 +84,37 @@ DigitalInputDebounced resetLineInput(RESET_INPUT, false, false);
 
 void outputResetState()
 {
-  Serial.print(F("Reset "));
-  Serial.println(resetLineInput.IsActive() ? 1 : 0);
+  //             0123456789
+  uint8_t msg[15] = "Reset 7";
+  msg[6] = resetLineInput.IsActive() ? '1' : '0';
+  serialCommWrapperSendMessage(msg, strlen(msg));
 }
 
+void periodicOutput()
+{
+  static uint32_t oldMillis = 0;
+  uint32_t newMillis = millis();
+  uint8_t msg[] = "Ping";
+  
+  if ((newMillis - oldMillis) >= 1000) {
+    oldMillis = newMillis;
+    serialCommWrapperSendMessage(msg, strlen(msg));
+  }
+}
+
+static void handleIncomingMessage(uint8_t *pData, uint8_t length);
+
+static void sendSerialByte(uint8_t b)
+{
+  Serial.write(b);
+}
 
 //------------------------------------------
 // Setup Routine
 //------------------------------------------
 void setup()
 {
-  Serial.begin(19200);
+  Serial.begin(57600);
   Serial.println(F("DEBUG Starting Amp Board Tester..."));
   
   Serial.println(F("DEBUG Initializing LCD."));
@@ -103,6 +128,9 @@ void setup()
   SeeedGrayOled.setGrayLevel(15); //Set Grayscale level. Any number between 0 - 15.
   SeeedGrayOled.setTextXY(RESET_LINE, 0);
   SeeedGrayOled.putString(RESET_TEXT);
+
+  serialCommWrapperInit(sendSerialByte, handleIncomingMessage);
+  handleIncomingMessage("v", 1);
 
   Serial.println(F("DEBUG Initialization complete."));
   
@@ -128,15 +156,21 @@ void setup()
    r - get state of reset line
 
 */
-void handleIncomingCommands(void)
+static void handleIncomingMessage(uint8_t *pData, uint8_t length)
 {
-  static uint8_t receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
-  static uint8_t receivedCommandBufferIndex = 0;
+  uint8_t receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
+  uint8_t receivedCommandBufferIndex = 0;
   uint8_t lastByteReceived;
 
-  if (Serial.available() > 0)
+  // Messages
+  // 0000000001111111111222222222233333333334444444444555555555566666666667
+  // 1234567890123456789012345678901234567890123456789012345678901234567890
+  // @nTimes 12345 12345[0xaa,0xbb]rn
+
+  while (length > 0)
   {
-    lastByteReceived = Serial.read();
+    lastByteReceived = *pData++;
+    length--;
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
     //    Serial.print("DEBUG Char rcvd: [");
     //    Serial.print(lastByteReceived);
@@ -151,18 +185,13 @@ void handleIncomingCommands(void)
       // attempt to parse the command
       switch (receivedCommandBuffer[0])
       {
-        case 'r':  // Start Pizza Oven Cycle
-          outputResetState();
+        case 'v': // query protocol version
+          serialCommWrapperSendMessage(versionString, strlen(versionString));
           receivedCommandBufferIndex = 0;
           break;
 
-        case 'v': // query protocol version
-          Serial.print(F("V "));
-          Serial.print(FIRMWARE_MAJOR_VERSION);
-          Serial.print(F("."));
-          Serial.print(FIRMWARE_MINOR_VERSION);
-          Serial.print(F(" bugfix "));
-          Serial.println(FIRMWARE_BUILD_VERSION);
+        case 'r':  // output state of the reset line
+          outputResetState();
           receivedCommandBufferIndex = 0;
           break;
 
@@ -179,8 +208,7 @@ void handleIncomingCommands(void)
           break;
       }
     }
-  }
-}
+  }}
 
 void updateDcInputs(void)
 {
@@ -203,9 +231,13 @@ void loop()
   bool resetLineOld = resetLineInput.IsActive();
   bool resetLineNew;
 
-  handleIncomingCommands();
   updateDcInputs();
-
+  periodicOutput();
+  
+  if (Serial.available() > 0)
+  {
+    serialCommWrapperHandleByte(Serial.read());
+  }
   resetLineNew = resetLineInput.IsActive();
 
   if (resetLineOld != resetLineNew)

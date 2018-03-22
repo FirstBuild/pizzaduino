@@ -26,10 +26,10 @@
 #include <stdint.h>
 #include "CircularBuffer.h"
 
-#define NUMBER_OF_RELAYS 8
+#define NUMBER_OF_RELAYS 10
 
-static CircularBuffer<uint8_t, NUMBER_OF_RELAYS> relaysToTurnOn;
-static CircularBuffer<uint8_t, NUMBER_OF_RELAYS> relaysToTurnOff;
+static CircularBuffer<uint8_t, NUMBER_OF_RELAYS*3> relaysToTurnOn;
+static CircularBuffer<uint8_t, NUMBER_OF_RELAYS*3> relaysToTurnOff;
 
 typedef struct Relay
 {
@@ -87,6 +87,7 @@ void relayDriverRun(void)
   static uint32_t oldTime = 0;
   uint32_t newTime = millis();
   uint8_t pin;
+  uint8_t i;
 
   if (newTime >= oldTime)
   {
@@ -112,6 +113,14 @@ void relayDriverRun(void)
         digitalWrite(pin, HIGH);
         setRelayActionComplete(pin);
         oldTime = newTime;
+      }
+      else 
+      { // all relays should be in their desired state, reinforce
+        for (i=0; i<lastRelay; i++)
+        {
+          // re-inforce all I/O
+          digitalWrite(relay[i].pin, relay[i].desiredState);
+        }
       }
     }
   }

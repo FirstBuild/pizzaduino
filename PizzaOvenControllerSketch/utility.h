@@ -24,12 +24,16 @@
 #define UTILITY_H
 
 #include <stdint.h>
+#include "PID_v1.h"
 
 uint32_t timeDiff(uint32_t newTime, uint32_t oldTime);
 bool CharIsADigit(unsigned char digit);
 void printHeaterTemperatureParameters(const char *pName, uint16_t *pParams);
+void printMessageWithTwoUints(const uint8_t * text, uint16_t uint1, uint16_t uint2);
+void printPidGains(const uint8_t * pText, PID *pPid);
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
 float GetFloatInputValue(float *pValue, uint8_t *pBuf);
+void floatToAscii(double *pVal, uint8_t *pBuf, uint8_t decimals);
 
 // These functions are defined in places other than utility.cpp
 void AllHeatersOffStateClear();

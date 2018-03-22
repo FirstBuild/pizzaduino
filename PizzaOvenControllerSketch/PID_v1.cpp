@@ -221,7 +221,6 @@ void PID::GetTerms(double *_pTerm, double *_iTerm, double *_dTerm) {
 }
 
 void PID::SeedITerm(double seed) {
-  ITerm = seed;
+  ITerm = (ITerm > outMax) ? outMax : seed;
 }
-
 

@@ -1,4 +1,4 @@
-  /*
+/*
   Copyright (c) 2015 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -9,7 +9,7 @@
   furnished to do so, subject to the following conditions:
 
   The above copyright notice and this permission notice shall be included in
-  all copies or substantial portions of the Software.
+  all copies or substantial portions of the Software.f
 
   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -21,8 +21,6 @@
 */
 
 // Pizza Oven Project
-
-//#include "FiniteStateMachine.h"
 #include "TimerOne.h"
 #include <avr/pgmspace.h>
 #include "thermocouple.h"
@@ -44,8 +42,17 @@
 #include "heater.h"
 #include "cookingStateMachine.h"
 #include "tcoAndFanCheck.h"
+#include <avr/wdt.h>
+#include "ftoa.h"
+#include "tcLimitCheck.h"
+#include "globals.h"
+#include "serialCommWrapper.h"
 
 static TcoAndFan tcoAndFan;
+static TcLimitCheck ufTcLimit(1400, 30000);
+static TcLimitCheck urTcLimit(1400, 30000);
+static TcLimitCheck lfTcLimit(1000, 5000);
+static TcLimitCheck lrTcLimit(1000, 5000);
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffff)
@@ -55,8 +62,10 @@ static TcoAndFan tcoAndFan;
 // Macros
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
-#define FIRMWARE_MINOR_VERSION   0
+#define FIRMWARE_MINOR_VERSION   2
 #define FIRMWARE_BUILD_VERSION   1
+
+const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
 //------------------------------------------
 // Macros for Constants and Pin Definitions
@@ -86,12 +95,24 @@ uint16_t doorDeployCount = 0;
 bool doorHasDeployed = false;
 DigitalInputDebounced doorInput(DOOR_STATUS_INPUT, false, true);
 
-static bool TCsHaveBeenInitialized = false;
+bool ufTcTempLimitFailed = false;
+uint16_t ufTcLimitExceededCount = 0;
+bool urTcTempLimitFailed = false;
+uint16_t urTcLimitExceededCount = 0;
+bool lfTcTempLimitFailed = false;
+uint16_t lfTcLimitExceededCount = 0;
+bool lrTcTempLimitFailed = false;
+uint16_t lrTcLimitExceededCount = 0;
 
-Heater upperFrontHeater = {{true, 1200, 1300,   0,  70}, 0, 0, relayStateOff, false, 0.0};
-Heater upperRearHeater  = {{true, 1100, 1200,   0,  70}, 0, 0, relayStateOff, false, 0};
-Heater lowerFrontHeater = {{true,  620,  630,  50, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerRearHeater  = {{true,  595,  605,   0,  49}, 0, 0, relayStateOff, false, 0};
+bool upperTempDiffExceeded = false;
+uint8_t upperTempDiffExceededCount = 0;
+bool lowerTempDiffExceeded = false;
+uint8_t lowerTempDiffExceededCount = 0;
+
+Heater upperFrontHeater = {{true, 1200, 1300,  0, 100}, 0, 0, relayStateOff, false, 0.0};
+Heater upperRearHeater  = {{true, 1100, 1200,  0, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{true,  600,  650, 50, 100}, 0, 0, relayStateOff, false, 0};
+Heater lowerRearHeater  = {{true,  575,  625,  0,  49}, 0, 0, relayStateOff, false, 0};
 
 // convenience array, could go into flash
 Heater *aHeaters[4] =
@@ -107,8 +128,14 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
-PidIo upperFrontPidIo = {1000, 47, {0.175, 0.001110517, 0.4}};
-PidIo upperRearPidIo = {1000, 47, {0.175, 0.0010935, 0.4}};
+//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.001110517, 0.4}};
+//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0010935,   0.4}};
+//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.0005, 0.4}};
+//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0005, 0.4}};
+//PidIo upperFrontPidIo = {1000, 47, {0.25, 0.0005, 0.4}};
+//PidIo upperRearPidIo  = {1000, 47, {0.25, 0.0005, 0.4}};
+PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
+PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
                   upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd, DIRECT);
 PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRearPidIo.Setpoint,
@@ -117,23 +144,58 @@ PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRe
 
 volatile bool outputTempPeriodic = false;
 
+static uint8_t watchdogResetOccurred = 0;
+
 
 //------------------------------------------
 // Prototypes
 //------------------------------------------
-void ConvertHeaterPercentCounts();
+void ConvertHeaterPercentCounts(void);
 void readThermocouples(void);
-void PeriodicOutputTemps();
+void PeriodicOutputInfo(void);
 uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
 float GetFloatInputValue(float *pValue, uint8_t *pBuf);
-void HeaterTimerInterrupt();
+void HeaterTimerInterrupt(void);
 void saveParametersToMemory(void);
 void readParametersFromMemory(void);
+static void handleIncomingMessage(uint8_t *pData, uint8_t length);
+bool needSave = false;
+
+static float slewRateLimit(float newValue, float oldValue, float limit)
+{
+  float difference;
+  
+  if (newValue > oldValue)
+  {
+    difference = newValue - oldValue;
+    if (difference <= limit)
+    {
+      return newValue;  
+    }
+    else
+    {
+      return oldValue + limit;
+    }
+  }
+  else
+  {
+    difference = oldValue - newValue;
+    if (difference <= limit)
+    {
+      return newValue;  
+    }
+    else
+    {
+      return oldValue - limit;
+    }    
+  }
+}
 
 void readThermocouples(void)
 {
-  static uint32_t oldTime = 0;
+  static uint32_t oldTime = 1000;
   uint32_t newTime = millis();
+  static bool filtersInitialized = false;
 
   if (newTime >= oldTime)
   {
@@ -153,18 +215,116 @@ void readThermocouples(void)
 
   oldTime = newTime;
 
-  upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
-  upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
-  lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT));
-  lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(readAD8495KTC(ANALOG_THERMO_LOWER_REAR));
-  TCsHaveBeenInitialized = true;
+  if (!filtersInitialized)
+  {
+    if (newTime < 1000) return;
+    upperFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
+    upperRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
+    lowerFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
+    lowerRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+    upperFrontHeater.tcFilter.initialize(upperFrontHeater.thermocouple);
+    upperRearHeater.tcFilter.initialize(upperRearHeater.thermocouple);
+    lowerFrontHeater.tcFilter.initialize(lowerFrontHeater.thermocouple);
+    lowerRearHeater.tcFilter.initialize(lowerRearHeater.thermocouple);
+    filtersInitialized = true;
+  }
+
+  upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT), upperFrontHeater.thermocouple, 250.0)); // 57.0
+  upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_REAR), upperRearHeater.thermocouple, 250.0));
+  lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT), lowerFrontHeater.thermocouple, 250.0)); // 4.4
+  lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(
+    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_REAR), lowerRearHeater.thermocouple, 250.0));
+
+  ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
+  urTcLimit.checkLimit(upperRearHeater.thermocouple);
+  lfTcLimit.checkLimit(lowerFrontHeater.thermocouple);
+  lrTcLimit.checkLimit(lowerRearHeater.thermocouple);
+
+  if (ufTcLimit.limitExceeded())
+  {
+    if (ufTcTempLimitFailed == false)
+    {
+      ufTcTempLimitFailed = true;
+      ufTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (urTcLimit.limitExceeded())
+  {
+    if (urTcTempLimitFailed == false)
+    {
+      urTcTempLimitFailed = true;
+      urTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (lfTcLimit.limitExceeded())
+  {
+    if (lfTcTempLimitFailed == false)
+    {
+      lfTcTempLimitFailed = true;
+      lfTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (lrTcLimit.limitExceeded())
+  {
+    if (lrTcTempLimitFailed == false)
+    {
+      lrTcTempLimitFailed = true;
+      lrTcLimitExceededCount++;
+      needSave = true;
+    }
+  }
+  if (needSave)
+  {
+    saveParametersToMemory(); 
+  }
+
+  // Check differentials
+  if (upperTempDiffExceeded == false)
+  {
+    if(fabs(fabs(upperFrontHeater.thermocouple - upperFrontPidIo.Setpoint) - fabs(upperRearHeater.thermocouple - upperRearPidIo.Setpoint)) > 500)
+    {
+      upperTempDiffExceededCount++; 
+      if (upperTempDiffExceededCount >= 250) 
+      {
+        upperTempDiffExceeded = true;
+      }
+    }
+    else 
+    {
+      upperTempDiffExceededCount = 0;
+    }
+  }
+
+  double lowerFrontSetpoint = (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn) / 2;
+  double lowerRearSetpoint = (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn) / 2;
+  if (lowerTempDiffExceeded == false)
+  {
+    if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 250)
+    {
+      lowerTempDiffExceededCount++; 
+      if (lowerTempDiffExceededCount >= 250) 
+      {
+        lowerTempDiffExceeded = true;
+      }
+    }
+    else
+    {
+      lowerTempDiffExceededCount = 0;
+    }
+  }
 }
 
 //------------------------------------------
 // Code
 //------------------------------------------
 
-void ConvertHeaterPercentCounts()
+void ConvertHeaterPercentCounts(void)
 {
   upperFrontHeater.heaterCountsOn  = (((uint32_t)upperFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
   upperFrontHeater.heaterCountsOff = (((uint32_t)upperFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
@@ -179,7 +339,7 @@ void ConvertHeaterPercentCounts()
   lowerRearHeater.heaterCountsOff  = (((uint32_t)lowerRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 }
 
-void UpdateHeaterHardware()
+void UpdateHeaterHardware(void)
 {
   changeRelayState(HEATER_TRIAC_UPPER_FRONT, upperFrontHeater.relayState);
   changeRelayState(HEATER_TRIAC_UPPER_REAR, upperRearHeater.relayState);
@@ -187,7 +347,7 @@ void UpdateHeaterHardware()
   changeRelayState(HEATER_RELAY_LOWER_REAR, lowerRearHeater.relayState);
 }
 
-void AllHeatersOffStateClear()
+void AllHeatersOffStateClear(void)
 {
 	uint8_t i;
 
@@ -203,143 +363,359 @@ void AllHeatersOffStateClear()
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOff);
 }
 
-void outputAcInputStates()
+void outputAcInputStates(void)
 {
-  Serial.print(F("Power "));
-  Serial.print(powerButtonIsOn());
-  Serial.print(F(" L2DLB "));
-  Serial.print(sailSwitchIsOn());
-  Serial.print(F(" TCO "));
-  Serial.println(tcoInputIsOn());
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgTemplate[] PROGMEM = "Power 7 L2DLB 8 TCO 9 AC 3";
+  uint8_t msg[28];
+  strcpy_P((char *)&msg[0], (const char *)&msgTemplate[0]);
+  msg[6]  = powerButtonIsOn() ? '1' : '0';
+  msg[14] = sailSwitchIsOn() ? '1' : '0';
+  msg[20] = tcoInputIsOn() ? '1' : '0';
+  msg[25] = acPowerIsPresent() ? '1' : '0';
+  serialCommWrapperSendMessage(&msg[0], strlen((const char *)&msg[0]));
 }
 
-void outputDoorStatus()
+void outputDoorStatus(void)
 {
-  Serial.print(F("Door "));
-  Serial.print(doorInput.IsActive() ? 1 : 0);
-  Serial.print(F(" Count "));
-  Serial.println(doorDeployCount);
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgTemplate[] PROGMEM = "Door 7 Count 65535";
+  uint8_t msg[22];
+  strcpy_P((char *)&msg[0], (char *)&msgTemplate[0]);
+  msg[5] = '0' + (doorInput.IsActive() ? 1 : 0);
+  itoa(doorDeployCount, (char *)&msg[13], 10);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
-void PeriodicOutputTemps()
+void outputDomeState(void)
+{
+  //                                           0000000000111111111122222222223
+  //                                           0123456789012345678901234567890
+  static const uint8_t msgDomeOn[]  PROGMEM = "Dome On";
+  static const uint8_t msgDomeOff[] PROGMEM = "Dome Off";
+  uint8_t msg[20];
+  if(getDomeState())
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgDomeOn[0]);
+  }
+  else
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgDomeOff[0]);
+  }
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
+
+void outputTemps(void)
 {
   uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
+  // 0000000000111111111122222222223
+  // 0123456789012345678901234567890
+  // Temps 1111 2222 3333 4444
+  uint8_t msg[30];
+  uint8_t buf[7];
 
-  // Output Periodic Temperatures
-  if (true == outputTempPeriodic)
+  intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
+  intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
+  intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
+  intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
+  
+  msg[0] = 0;
+  strcat((char *)&msg[0], "Temps ");
+  itoa(intTempCUF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCUR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
+
+void outputCookingState(void)
+{
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgStandby[]  PROGMEM = "State Standby";
+  static const uint8_t msgDlb[]      PROGMEM = "State DLB";
+  static const uint8_t msgPreheat[] PROGMEM = "State Preheat";
+  static const uint8_t msgPreheatStoneOnly[] PROGMEM = "State PreheatStoneOnly";
+  static const uint8_t msgCooking[]  PROGMEM = "State Cooking";
+  static const uint8_t msgStandbyBottom[]  PROGMEM = "State Idle";
+  static const uint8_t msgCooldown[] PROGMEM = "State Cooldown";
+  uint8_t msg[20];
+  switch (getCookingState())
   {
-    outputTempPeriodic = false;
+    case cookingStandby:
+      strcpy_P((char *)&msg[0], (char *)&msgStandby[0]);
+      break;
+    case cookingWaitForDlb:
+      strcpy_P((char *)&msg[0], (char *)&msgDlb[0]);
+      break;
+    case cookingPreheat:
+      strcpy_P((char *)&msg[0], (char *)&msgPreheat[0]);
+      break;
+    case cookingPreheatStoneOnly:
+      strcpy_P((char *)&msg[0], (char *)&msgPreheatStoneOnly[0]);
+      break;
+    case cookingCooking:
+      strcpy_P((char *)&msg[0], (char *)&msgCooking[0]);
+      break;
+    case cookingIdle:
+      strcpy_P((char *)&msg[0], (char *)&msgStandbyBottom[0]);
+      break;
+    case cookingCooldown:
+      strcpy_P((char *)&msg[0], (char *)&msgCooldown[0]);
+      break;
+  }
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
 
-    intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
-    intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
-    intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
-    intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
+void outputFailures(void)
+{
+  //                                                       0000000000111111111122222222223
+  //                                                       0123456789012345678901234567890
+  static const uint8_t msgUpperDiffExceeded[]   PROGMEM = "FAIL: upper_diff_exceeded";
+  static const uint8_t msgLowerDiffExceeded[]   PROGMEM = "FAIL: lower_diff_exceeded";
+  static const uint8_t msgWatchdogReset[]       PROGMEM = "WARN: watchdog_reset";
+  static const uint8_t msgTcoFailure[]          PROGMEM = "FAIL: tco_failure";
+  static const uint8_t msgCoolingFanFailure[]   PROGMEM = "FAIL: cooling_fan";
+  static const uint8_t msgUfTcOvertempFailure[] PROGMEM = "FAIL: uf_overtemp";
+  static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "FAIL: ur_overtemp";
+  static const uint8_t msgLfTcOvertempFailure[] PROGMEM = "FAIL: lf_overtemp";
+  static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "FAIL: lr_overtemp";
+  static const uint8_t msgDoorDropped[]         PROGMEM = "FAIL: door_dropped";
+  uint8_t msg[31];
+  
+  if(tcoAndFan.tcoHasFailed())
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgTcoFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }
+  if(tcoAndFan.coolingFanHasFailed())
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgCoolingFanFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }
+  if (watchdogResetOccurred != 0)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgWatchdogReset[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
+  if (ufTcTempLimitFailed != 0)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgUfTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
+  
+  if (urTcTempLimitFailed != 0)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgUrTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
+  
+  if (lfTcTempLimitFailed != 0)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgLfTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
+  
+  if (lrTcTempLimitFailed != 0)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgLrTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
 
-#ifndef ENABLE_PID_TUNING
-    Serial.print(F("Temps "));
-    Serial.print(intTempCUF);
-    Serial.print(F(" "));
-    Serial.print(intTempCUR);
-    Serial.print(F(" "));
-    Serial.print(intTempCLF);
-    Serial.print(F(" "));
-    Serial.println(intTempCLR);
+  if (upperTempDiffExceeded)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgUpperDiffExceeded[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
+  if (lowerTempDiffExceeded)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgLowerDiffExceeded[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
+  if (doorInput.IsActive())
+  {
+    strcpy_P((char *)&msg[0], (const char *)&msgDoorDropped[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }
+}
 
-    outputAcInputStates();
-    outputDoorStatus();
+void outputRelayStates(void)
+{
+  //                                            0000000000111111111122222222223
+  //                                            0123456789012345678901234567890
+  static const uint8_t msgTemplate[] PROGMEM = "Relays 1 2 3 4";
+  uint8_t msg[18];
+  strcpy_P((char *)&msg[0], (const char *)&msgTemplate[0]);
+  msg[7] = '0' + digitalRead(HEATER_TRIAC_UPPER_FRONT);
+  msg[9] = '0' + digitalRead(HEATER_TRIAC_UPPER_REAR);
+  msg[11] = '0' + digitalRead(HEATER_RELAY_LOWER_FRONT);
+  msg[13] = '0' + digitalRead(HEATER_RELAY_LOWER_REAR);
+  
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
 
-    switch (getCookingState())
-    {
-      case cookingStandby:
-        Serial.println(F("State Standby"));
-        break;
-      case cookingWaitForDlb:
-        Serial.println(F("State DLB"));
-        break;
-      case cookingCooking:
-        Serial.println(F("State Cooking"));
-        break;
-      case cookingCooldown:
-        Serial.println(F("State Cooldown"));
-        break;
-    }
+void outputPidDutyCycles(void)
+{
+  // 0000000000111111111122222222223
+  // 0123456789012345678901234567890
+  // PidDC 100.0000000 100.0000000
+  uint8_t msg[35];
+  strcpy((char *)&msg[0], "PidDC ");
+  ftoa(upperFrontPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
+  strcat((char *)&msg[0], " ");
+  ftoa(upperRearPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
 
-    if(tcoAndFan.tcoHasFailed())
-    {
-        Serial.println(F("TCO failure"));      
-    }
-    if(tcoAndFan.coolingFanHasFailed())
-    {
-        Serial.println(F("Cooling fan failure"));      
-    }
+void outputTimeInfo(void)
+{
+  // 00000000001111111111222222222233333333334
+  // 01234567890123456789012345678901234567890
+  // Time: 4294967295, thresh: 4294967295
+  uint8_t msg[45];
+  uint8_t buf[15];
+  
+  msg[0] = 0;
+  strcat((char *)&msg[0], "Time: ");
+  ultoa(relayTimeBase, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], ", thresh: ");
+  ultoa(lowerRearHeater.heaterCountsOn, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (const char *)&buf[0]);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
 
-    Serial.print(F("Relays "));
-    Serial.print(digitalRead(HEATER_TRIAC_UPPER_FRONT));
-    Serial.print(F(" "));
-    Serial.print(digitalRead(HEATER_TRIAC_UPPER_REAR));
-    Serial.print(F(" "));
-    Serial.print(digitalRead(HEATER_RELAY_LOWER_FRONT));
-    Serial.print(F(" "));
-    Serial.println(digitalRead(HEATER_RELAY_LOWER_REAR));
-    Serial.print(F("PidDC "));
-    Serial.print(upperFrontPidIo.Output, 7);
-    Serial.print(F(" "));
-    Serial.println(upperRearPidIo.Output, 7);
-
-    Serial.print("Time: ");
-    Serial.print(relayTimeBase);
-    Serial.print(", thresh: ");
-    Serial.println(lowerRearHeater.heaterCountsOn);
-
-#endif
-
+void PeriodicOutputInfo()
+{
+  static uint8_t printPhase = 0;
+  uint32_t maxTimeTestVar = (uint32_t)3 * 3600 * 1000;
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
     double pTerm;
     double iTerm;
     double dTerm;
-
-    upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
-
-    Serial.print(F("Time KP KI KD Raw Temp % Set pTerm iTerm dTerm, "));
-    Serial.print(millis());
-    Serial.print(F(", "));
-    Serial.print(upperRearPID.GetKp(), 7);
-    Serial.print(F(", "));
-    Serial.print(upperRearPID.GetKi(), 7);
-    Serial.print(F(", "));
-    Serial.print(upperRearPID.GetKd(), 7);
-    Serial.print(F(", "));
-    Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
-    Serial.print(F(", "));
-    Serial.print(upperRearHeater.thermocouple);
-    Serial.print(F(", "));
-    Serial.print(upperRearPidIo.Output);
-    Serial.print(F(", "));
-    Serial.print(upperRearPidIo.Setpoint);
-    Serial.print(F(", "));
-    Serial.print(pTerm, 6);
-    Serial.print(F(", "));
-    Serial.print(iTerm, 6);
-    Serial.print(F(", "));
-    Serial.print(dTerm, 6);
-    Serial.println("");
 #endif
 #endif
 
-    // stuff for impulse response testing
-    Serial.println(F("DEBUG, Time, UF DC, UF Temp, UR DC, UR Temp"));
-    Serial.print(F("DEBUG, "));
-    Serial.print(millis());
-    Serial.print(F(", "));
-    Serial.print(upperFrontPidIo.Output);
-    Serial.print(F(", "));
-    Serial.print(intTempCUF);
-    Serial.print(F(", "));
-    Serial.print(upperRearPidIo.Output);
-    Serial.print(F(", "));
-    Serial.println(intTempCUR);
-    }
+  switch (printPhase)
+  {
+    case 0:
+      if (true == outputTempPeriodic)
+      {
+        printPhase++;
+        outputTempPeriodic = false;
+      }
+      break;
+    case 1:
+      outputTemps();
+      outputAcInputStates();
+      outputDoorStatus();
+      outputCookingState();
+      outputFailures();
+      handleRelayWatchdog();
+      outputRelayStates();
+      outputPidDutyCycles();
+      outputTimeInfo();
+      printPhase++;
+    break;
+    case 2:
+      outputDomeState();
+      printPhase++;
+      break;
+    
+#ifdef USE_PID
+#ifdef ENABLE_PID_TUNING
+    case 2:
+      Serial.print(F("DEBUG, Time, UR KP, UR KI, UR KD, UR Raw, UR Temp, UR DC, UR Setpoint, UR pTerm, "));
+      printPhase++;
+      break;
+    case 3:
+      Serial.println(F("UR iTerm, UR dTerm, UF KP, UF KI, UF KD, UF Raw, UF Temp, UF DC, UF Setpoint, UF pTerm, UF iTerm, UF dTerm"));
+      printPhase++;
+      break;
+    case 4:
+      printPhase++;
+      break;
+    case 5:
+      Serial.print(F("DEBUG, "));
+      Serial.print(millis());
+      Serial.print(F(", "));
+      Serial.print(upperRearPID.GetKp(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperRearPID.GetKi(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperRearPID.GetKd(), 7);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 6:
+      Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
+      Serial.print(F(", "));
+      Serial.print(upperRearHeater.thermocouple);
+      Serial.print(F(", "));
+      Serial.print(upperRearPidIo.Output);
+      Serial.print(F(", "));
+      Serial.print(upperRearPidIo.Setpoint);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 7:
+      upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
+      Serial.print(pTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(iTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(dTerm, 6);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 8:
+      Serial.print(upperFrontPID.GetKp(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPID.GetKi(), 7);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPID.GetKd(), 7);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 9:
+      Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
+      Serial.print(F(", "));
+      Serial.print(upperFrontHeater.thermocouple);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPidIo.Output);
+      Serial.print(F(", "));
+      Serial.print(upperFrontPidIo.Setpoint);
+      Serial.print(F(", "));
+      printPhase++;
+      break;
+    case 10:
+      upperFrontPID.GetTerms(&pTerm, &iTerm, &dTerm);
+      Serial.print(pTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(iTerm, 6);
+      Serial.print(F(", "));
+      Serial.print(dTerm, 6);
+      Serial.println("");
+      printPhase++;
+      break;
+#endif
+#endif
+    case 11:
+      printPhase++;
+      break;
+    default:
+      printPhase = 0;
+  }
 }
 
 //------------------------------------------
@@ -388,6 +764,10 @@ void saveParametersToMemory(void)
 #endif
   pizzaMemoryWrite((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
   pizzaMemoryWrite((uint8_t*)&doorHasDeployed, offsetof(MemoryStore, doorHasDeployed), sizeof(doorHasDeployed));
+  pizzaMemoryWrite((uint8_t*)&ufTcLimitExceededCount, offsetof(MemoryStore, ufTcLimitExceededCount), sizeof(ufTcLimitExceededCount));
+  pizzaMemoryWrite((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
+  pizzaMemoryWrite((uint8_t*)&lfTcLimitExceededCount, offsetof(MemoryStore, lfTcLimitExceededCount), sizeof(lfTcLimitExceededCount));
+  pizzaMemoryWrite((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
 }
 
 void readParametersFromMemory(void)
@@ -403,6 +783,15 @@ void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&upperRearPidIo.pidParameters, offsetof(MemoryStore, upperRearPidParameters), sizeof(PidParameters));
 #endif
   pizzaMemoryRead((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
+  pizzaMemoryRead((uint8_t*)&ufTcLimitExceededCount, offsetof(MemoryStore, ufTcLimitExceededCount), sizeof(ufTcLimitExceededCount));
+  pizzaMemoryRead((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
+  pizzaMemoryRead((uint8_t*)&lfTcLimitExceededCount, offsetof(MemoryStore, lfTcLimitExceededCount), sizeof(lfTcLimitExceededCount));
+  pizzaMemoryRead((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
+}
+
+static void sendSerialByte(uint8_t b)
+{
+  Serial.write(b);
 }
 
 //------------------------------------------
@@ -410,6 +799,21 @@ void readParametersFromMemory(void)
 //------------------------------------------
 void setup()
 {
+  uint8_t mcusrAtStart = MCUSR;
+  cli(); 
+  wdt_reset();
+
+  upperTempDiffExceededCount = 0;
+  lowerTempDiffExceededCount = 0;
+
+  /* Clear all flags in MCUSR */
+  MCUSR &= ~((1<<WDRF) | (1<<BORF) | (1<<EXTRF) | (1<<PORF) );
+  /* Write logical one to WDCE and WDE */
+  /* Keep old prescaler setting to prevent unintentional time-out */
+  WDTCSR |= (1<<WDCE) | (1<<WDE);
+  /* Turn off WDT */
+  WDTCSR = 0x00;
+
   pizzaMemoryReturnTypes pizzaMemoryInitResponse;
   uint8_t i;
   uint8_t relaysToInitialize[] = {
@@ -429,9 +833,32 @@ void setup()
     ANALOG_THERMO_LOWER_REAR
   };
 
+  // disable the watchdog timer
+
   Serial.begin(19200);
   Serial.println(F("DEBUG Starting pizza oven..."));
 
+  if (mcusrAtStart & (1<<WDRF))
+  {
+    Serial.println(F("DEBUG The system restarted due to watchdog timer reset."));
+    watchdogResetOccurred = 1;
+  }
+  if (mcusrAtStart & (1<<BORF))
+  {
+    Serial.println(F("DEBUG The system restarted due to brown-out reset."));
+  }
+  if (mcusrAtStart & (1<<EXTRF))
+  {
+    Serial.println(F("DEBUG The system restarted due to external reset."));
+  }
+  if (mcusrAtStart & (1<<PORF))
+  {
+    Serial.println(F("DEBUG The system restarted due to power on reset."));
+  }
+
+  serialCommWrapperInit(sendSerialByte, handleIncomingMessage);
+  handleIncomingMessage((uint8_t *)"v", 1);
+  
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
   if (pizzaMemoryWasEmpty == pizzaMemoryInitResponse)
@@ -483,7 +910,10 @@ void setup()
   upperRearPID.SetTunings(upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd);
 #endif
 
+  wdt_enable(WDTO_2S);
+
   Serial.println(F("DEBUG Initialization complete."));
+  sei();
 }
 
 #define RECEVIED_COMMAND_BUFFER_LENGTH (16)
@@ -491,30 +921,39 @@ void setup()
 /*
    Serial commands prefixes:
 
+   d - set dome on or off
+   D - get dome state
    f - set off percent
    g - set pid gains
    G - get the pid gains
    l - set lower temp limit
    n - set on percent
-   p - print heater parameters
+   p - get heater parameters
    q - stop oven
    s - start oven
    t - set time base
-   v - query firmware version
+   v - get firmware version
    u - set upper temp limit
 
 */
-void handleIncomingCommands(void)
+static void handleIncomingMessage(uint8_t *pData, uint8_t length)
 {
-  static uint8_t receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
-  static uint8_t receivedCommandBufferIndex = 0;
+  uint8_t receivedCommandBuffer[RECEVIED_COMMAND_BUFFER_LENGTH];
+  uint8_t receivedCommandBufferIndex = 0;
   uint8_t lastByteReceived;
   PID *pPid = NULL;
   uint8_t heaterIndex;
+  const uint8_t * pText;
+  uint16_t newSetpoint;
+  // Messages
+  // 0000000001111111111222222222233333333334444444444555555555566666666667
+  // 1234567890123456789012345678901234567890123456789012345678901234567890
+  // @nTimes 12345 12345[0xaa,0xbb]rn
 
-  if (Serial.available() > 0)
+  while (length > 0)
   {
-    lastByteReceived = Serial.read();
+    lastByteReceived = *pData++;
+    length--;
     receivedCommandBuffer[receivedCommandBufferIndex++] = lastByteReceived;
     //    Serial.print("DEBUG Char rcvd: [");
     //    Serial.print(lastByteReceived);
@@ -530,14 +969,40 @@ void handleIncomingCommands(void)
       switch (receivedCommandBuffer[0])
       {
         case 's':  // Start Pizza Oven Cycle
-          //pizzaOvenStartRequested = true;
           requestPizzaOvenStart();
           receivedCommandBufferIndex = 0;
           Serial.println(F("DEBUG Pizza oven start requested."));
           break;
 
+        case 'd':  // Set dome state
+          if (receivedCommandBufferIndex >= 2)
+          {
+            switch (receivedCommandBuffer[1])
+            {
+              case '0' :
+                Serial.println(F("DEBUG Setting dome off."));
+                setDomeState(0);
+                break;
+              case '1' :
+                Serial.println(F("DEBUG Setting dome on."));
+                setDomeState(1);
+                break;
+              default:
+                Serial.print(F("DEBUG unknown command received for the 'd' command: "));
+                Serial.println(receivedCommandBuffer[1]);
+                break;
+            }
+
+            receivedCommandBufferIndex = 0;
+          }
+          break;
+
+        case 'D':  // get dome state
+          outputDomeState();
+          receivedCommandBufferIndex = 0;
+          break;
+
         case 'q': // Quit Pizza Oven Cycle
-          //pizzaOvenStopRequested = true;
           requestPizzaOvenStop();
           receivedCommandBufferIndex = 0;
           upperFrontPID.SetMode(MANUAL);
@@ -545,12 +1010,7 @@ void handleIncomingCommands(void)
           break;
 
         case 'v': // query protocol version
-          Serial.print(F("V "));
-          Serial.print(FIRMWARE_MAJOR_VERSION);
-          Serial.print(F("."));
-          Serial.print(FIRMWARE_MINOR_VERSION);
-          Serial.print(F(" bugfix "));
-          Serial.println(FIRMWARE_BUILD_VERSION);
+          serialCommWrapperSendMessage((uint8_t *)&versionString[0], strlen(versionString));
           receivedCommandBufferIndex = 0;
           break;
 
@@ -560,22 +1020,24 @@ void handleIncomingCommands(void)
             switch (receivedCommandBuffer[1])
             {
               case '0' :
-                Serial.print(F("nTimes "));
-                Serial.print(triacPeriodSeconds);
-                Serial.print(" ");
-                Serial.println(relayPeriodSeconds);
+                static const uint8_t nTimesText[] PROGMEM = "nTimes ";
+                printMessageWithTwoUints(nTimesText, triacPeriodSeconds, relayPeriodSeconds); 
                 break;
               case '1' :
-                printHeaterTemperatureParameters("UF ", upperFrontHeater.parameter.parameterArray);
+                static const char ufText[] PROGMEM = "UF ";
+                printHeaterTemperatureParameters(ufText, upperFrontHeater.parameter.parameterArray);
                 break;
               case '2' :
-                printHeaterTemperatureParameters("UR ", upperRearHeater.parameter.parameterArray);
+                static const char urText[] PROGMEM = "UR ";
+                printHeaterTemperatureParameters(urText, upperRearHeater.parameter.parameterArray);
                 break;
               case '3' :
-                printHeaterTemperatureParameters("LF ", lowerFrontHeater.parameter.parameterArray);
+                static const char lfText[] PROGMEM = "LF ";
+                printHeaterTemperatureParameters(lfText, lowerFrontHeater.parameter.parameterArray);
                 break;
               case '4' :
-                printHeaterTemperatureParameters("LR ", lowerRearHeater.parameter.parameterArray);
+                static const char lrText[] PROGMEM = "LR ";
+                printHeaterTemperatureParameters(lrText, lowerRearHeater.parameter.parameterArray);
                 break;
               default:
                 Serial.print(F("DEBUG unknown command received for the 'p' command: "));
@@ -597,23 +1059,30 @@ void handleIncomingCommands(void)
             {
               heaterIndex = (receivedCommandBuffer[1] - '0')-1;
               pHeater = aHeaters[heaterIndex];
+              
+              GetInputValue(&newSetpoint, &receivedCommandBuffer[2]);
+              if (newSetpoint > maxTempSetting[heaterIndex])
+              {
+                newSetpoint = maxTempSetting[heaterIndex];
+              }
+              
               if (receivedCommandBuffer[0] == 'l')
               {
                 Serial.println(F("DEBUG Setting lower setpoint."));
-                GetInputValue(&pHeater->parameter.tempSetPointLowOn, &receivedCommandBuffer[2]);
-                if (&pHeater->parameter.tempSetPointLowOn > maxTempSetting[heaterIndex])
+                if (newSetpoint > pHeater->parameter.tempSetPointLowOn)
                 {
-                  pHeater->parameter.tempSetPointLowOn = maxTempSetting[heaterIndex];
+                  theSetpointWasIncreased(stoneSetpointIncreased);
                 }
+                pHeater->parameter.tempSetPointLowOn = newSetpoint;
               }
               else
               {
                 Serial.println(F("DEBUG Setting upper setpoint."));
-                GetInputValue(&pHeater->parameter.tempSetPointHighOff, &receivedCommandBuffer[2]);
-                if (&pHeater->parameter.tempSetPointHighOff > maxTempSetting[heaterIndex])
+                if (newSetpoint > pHeater->parameter.tempSetPointHighOff)
                 {
-                  pHeater->parameter.tempSetPointHighOff = maxTempSetting[heaterIndex];
+                  theSetpointWasIncreased(domeSetpointIncreased);
                 }
+                pHeater->parameter.tempSetPointHighOff = newSetpoint;
               }
               saveParametersToMemory();
             }
@@ -783,17 +1252,19 @@ void handleIncomingCommands(void)
           break;
 
         case 'G': // query PID parameters
-
+          static const uint8_t ufgText[] PROGMEM = "UFG ";
+          static const uint8_t urgText[] PROGMEM = "URG ";
+          
           if (receivedCommandBufferIndex >= 2)
           {
             switch (receivedCommandBuffer[1])
             {
               case '1' :
-                Serial.print(F("UFG "));
+                pText = ufgText;
                 pPid = &upperFrontPID;
                 break;
               case '2' :
-                Serial.print(F("URG "));
+                pText = urgText;
                 pPid = &upperRearPID;
                 break;
               default:
@@ -804,13 +1275,7 @@ void handleIncomingCommands(void)
 
             if (pPid != NULL)
             {
-
-              Serial.print(pPid->GetKp(), 7);
-              Serial.print(F(" "));
-              Serial.print(pPid->GetKi(), 7);
-              Serial.print(F(" "));
-              Serial.print(pPid->GetKd(), 7);
-              Serial.println(F(" "));
+              printPidGains(pText, pPid);
             }
 
             receivedCommandBufferIndex = 0;
@@ -860,11 +1325,17 @@ void loop()
   bool oldPowerButtonState = powerButtonIsOn();
   bool oldDlbState = sailSwitchIsOn();
 
+  // pet the watchdog
+  wdt_reset();
+
   // Gather inputs and process
   adcReadRun();
   acInputsRun();
   readThermocouples();
-  handleIncomingCommands();
+  if (Serial.available() > 0)
+  {
+    serialCommWrapperHandleByte(Serial.read());
+  }
   updateDcInputs();
 
   // handle door status
@@ -889,8 +1360,9 @@ void loop()
   boostEnable(relayBoostRun);
   relayDriverRun();
 
-  PeriodicOutputTemps();
   handleRelayWatchdog();
+
+  PeriodicOutputInfo();
 
   // PID
 #ifdef USE_PID
@@ -899,12 +1371,13 @@ void loop()
   upperFrontPID.Compute();
   upperRearPID.Compute();
   ConvertHeaterPercentCounts();
-  
+
   upperFrontPidIo.Output = upperFrontHeater.parameter.offPercent;
   upperRearPidIo.Output = upperRearHeater.parameter.offPercent;
-
+  
 //  upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
-//  upperRearHeater.heaterCountsOn = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+//  upperRearHeater.heaterCountsOn  = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+
 #endif
 }
 

@@ -26,20 +26,27 @@
 typedef enum {
   cookingStandby,
   cookingWaitForDlb,
+  cookingPreheat,
+  cookingPreheatStoneOnly,
   cookingCooking,
+  cookingIdle,
   cookingCooldown,
   cookingInvald = 255
 } cookingState;
 
+typedef enum {
+  stoneSetpointIncreased,
+  domeSetpointIncreased
+} thisSetpointIncreased;
 
 void initCookingStateMachine(void);
 void updateCookingStateMachine(void);
 cookingState getCookingState(void);
 void requestPizzaOvenStart(void);
 void requestPizzaOvenStop(void);
-
-bool coolingFanHasFailed(void);
-bool tcoHasFailed(void);
+void setDomeState(uint8_t state);
+uint8_t getDomeState(void);
+void theSetpointWasIncreased(thisSetpointIncreased which);
 
 #endif // COOKING_STATE_MACHINE_H
  

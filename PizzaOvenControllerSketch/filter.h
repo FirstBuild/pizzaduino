@@ -1,4 +1,4 @@
-/*
+  /*
   Copyright (c) 2016 FirstBuild
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -32,6 +32,12 @@ class  FilterBeLp2
     {
       v[0] = 0.0;
       v[1] = 0.0;
+    }
+    void initialize(float initVal)
+    {
+      v[0] = initVal/4;
+      v[1] = initVal/4;
+      v[2] = initVal/4;
     }
   private:
     float v[3];
