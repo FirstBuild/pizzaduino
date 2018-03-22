@@ -354,7 +354,7 @@ void AllHeatersOffStateClear(void)
 	for (i=0; i<4; i++)
 	{
 		aHeaters[i]->relayState = relayStateOff;
-		aHeaters[i]->heaterCoolDownState = true;
+		aHeaters[i]->heaterCoolDownState = false;
 	}
 
   UpdateHeaterHardware();
