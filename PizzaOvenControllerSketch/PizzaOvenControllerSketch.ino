@@ -61,9 +61,9 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 // Macros
 //------------------------------------------
-#define FIRMWARE_MAJOR_VERSION   1
-#define FIRMWARE_MINOR_VERSION   2
-#define FIRMWARE_BUILD_VERSION   1
+#define FIRMWARE_MAJOR_VERSION   4
+#define FIRMWARE_MINOR_VERSION   4
+#define FIRMWARE_BUILD_VERSION   4
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -1327,16 +1327,20 @@ void loop()
 
   // pet the watchdog
   wdt_reset();
+  
+  handleRelayWatchdog();
 
   // Gather inputs and process
   adcReadRun();
   acInputsRun();
   readThermocouples();
+  handleRelayWatchdog();
   if (Serial.available() > 0)
   {
     serialCommWrapperHandleByte(Serial.read());
   }
   updateDcInputs();
+  handleRelayWatchdog();
 
   // handle door status
   if (doorInput.IsActive())
@@ -1356,6 +1360,7 @@ void loop()
 
 //poStateMachine.update();
   updateCookingStateMachine();
+  handleRelayWatchdog();
 
   boostEnable(relayBoostRun);
   relayDriverRun();
@@ -1368,8 +1373,11 @@ void loop()
 #ifdef USE_PID
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
+  handleRelayWatchdog();
   upperFrontPID.Compute();
+  handleRelayWatchdog();
   upperRearPID.Compute();
+  handleRelayWatchdog();
   ConvertHeaterPercentCounts();
 
   upperFrontPidIo.Output = upperFrontHeater.parameter.offPercent;

@@ -25,6 +25,7 @@
 #include "relayBoost.h"
 #include <stdint.h>
 #include "CircularBuffer.h"
+#include "watchdogRelay.h"
 
 #define NUMBER_OF_RELAYS 10
 
@@ -99,7 +100,13 @@ void relayDriverRun(void)
         //        Serial.print("Turning relay ");
         //        Serial.print(pin);
         //        Serial.println(" off.");
+        handleRelayWatchdog();
         digitalWrite(pin, LOW);
+        Serial.print(F("Debug Relay Actual, Time, "));
+        Serial.print(millis());
+        Serial.print(F(", Pin, "));
+        Serial.print(pin);
+        Serial.println(F("State, off"));
         setRelayActionComplete(pin);
         oldTime = newTime;
       }
@@ -110,7 +117,13 @@ void relayDriverRun(void)
         //        Serial.print("Turning relay ");
         //        Serial.print(pin);
         //        Serial.println(" on.");
+        handleRelayWatchdog();
         digitalWrite(pin, HIGH);
+        Serial.print(F("Debug Relay Actual, Time, "));
+        Serial.print(millis());
+        Serial.print(F(", Pin, "));
+        Serial.print(pin);
+        Serial.println(F("State, on"));
         setRelayActionComplete(pin);
         oldTime = newTime;
       }
@@ -132,19 +145,26 @@ void relayDriverRun(void)
 
 static void addRelayToChangeList(uint8_t pin, RelayState desiredState)
 {
+  handleRelayWatchdog();
+  Serial.print(F("Debug Relay Req, Time, "));
+  Serial.print(millis());
+  Serial.print(F(", Pin, "));
+  Serial.print(pin);
+  Serial.print(F("State, "));
+  
   switch (desiredState)
   {
     case relayStateOn:
       //      Serial.print("Staging relay ");
       //      Serial.print(pin);
-      //      Serial.println(" on.");
+      Serial.println(F(" on"));
       relaysToTurnOn.push(pin);
       break;
 
     case relayStateOff:
       //      Serial.print("Staging relay ");
       //      Serial.print(pin);
-      //      Serial.println(" off.");
+      Serial.println(F(" off"));
       relaysToTurnOff.push(pin);
       break;
   }
