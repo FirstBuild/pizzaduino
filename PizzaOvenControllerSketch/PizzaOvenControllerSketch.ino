@@ -63,7 +63,7 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   2
-#define FIRMWARE_BUILD_VERSION   2
+#define FIRMWARE_BUILD_VERSION   9
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -128,14 +128,30 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
-//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.001110517, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0010935,   0.4}};
-//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.0005, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0005, 0.4}};
-//PidIo upperFrontPidIo = {1000, 47, {0.25, 0.0005, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.25, 0.0005, 0.4}};
-PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
-PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
+// old values
+//PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
+//PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
+// values based on 35% fixed duty cycle, SM = 2
+//PidIo upperFrontPidIo = {1000, 47, {5.863, 0.31, 0.0}};
+//PidIo upperRearPidIo  = {1000, 47, {16.706, 3.019, 0.0}};
+// values based on 65% fixed duty cycle, SM = 2
+//PidIo upperFrontPidIo = {1000, 47, {22.84614311, 2.42453115, 0.0}};
+//PidIo upperRearPidIo  = {1000, 47, {16.46018028, 1.771298719, 0.0}};
+// values based on 65% fixed duty cycle, SM = 1
+//PidIo upperFrontPidIo = {1000, 47, {45.69228622, 4.8490623, 0.0}};
+//PidIo upperRearPidIo  = {1000, 47, {32.92036057, 3.542597439, 0.0}};
+// values based on 65% fixed duty cycle, SM = 0.75
+//PidIo upperFrontPidIo = {1000, 47, {91.30531622, 14.26002669, 0.0}};
+//PidIo upperRearPidIo  = {1000, 47, {65.76952525, 10.36983619, 0.0}};
+// making stuff up #1
+//PidIo upperFrontPidIo = {1000, 47, {100.0, 25.0, 0.0}};
+//PidIo upperRearPidIo  = {1000, 47, {100.0, 25.0, 0.0}};
+// making stuff up #2
+//PidIo upperFrontPidIo = {1000, 47, {100.0, 35.0, 0.0}};
+//PidIo upperRearPidIo  = {1000, 47, {125.0, 35.0, 0.0}};
+// making stuff up #3
+PidIo upperFrontPidIo = {1000, 47, {100.0, 45.0, 0.0}};
+PidIo upperRearPidIo  = {1000, 47, {150.0, 45.0, 0.0}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
                   upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd, DIRECT);
 PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRearPidIo.Setpoint,
@@ -616,15 +632,18 @@ void PeriodicOutputInfo()
       }
       break;
     case 1:
+      handleRelayWatchdog();
       outputTemps();
       outputAcInputStates();
       outputDoorStatus();
+      handleRelayWatchdog();
       outputCookingState();
       outputFailures();
       handleRelayWatchdog();
       outputRelayStates();
       outputPidDutyCycles();
       outputTimeInfo();
+      handleRelayWatchdog();
       printPhase++;
     break;
     case 2:
@@ -1327,11 +1346,13 @@ void loop()
 
   // pet the watchdog
   wdt_reset();
+  handleRelayWatchdog();
 
   // Gather inputs and process
   adcReadRun();
   acInputsRun();
   readThermocouples();
+  handleRelayWatchdog();
   if (Serial.available() > 0)
   {
     serialCommWrapperHandleByte(Serial.read());
@@ -1354,6 +1375,7 @@ void loop()
     outputAcInputStates();
   }
 
+  handleRelayWatchdog();
 //poStateMachine.update();
   updateCookingStateMachine();
 
@@ -1368,8 +1390,11 @@ void loop()
 #ifdef USE_PID
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
+  handleRelayWatchdog();
   upperFrontPID.Compute();
+  handleRelayWatchdog();
   upperRearPID.Compute();
+  handleRelayWatchdog();
   ConvertHeaterPercentCounts();
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
   upperRearHeater.heaterCountsOn  = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
