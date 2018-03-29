@@ -123,6 +123,12 @@ Heater *aHeaters[4] =
   &lowerRearHeater
 };
 
+// for testing
+double upperFrontTcReading;
+double upperRearTcReading;
+double lowerFrontTcReading;
+double lowerRearTcReading;
+
 const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEMP, MAX_LOWER_TEMP};
 
 #ifdef USE_PID
@@ -215,13 +221,24 @@ void readThermocouples(void)
 
   oldTime = newTime;
 
+  upperFrontTcReading = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
+  upperRearTcReading  = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
+  lowerFrontTcReading = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
+  lowerRearTcReading  = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+
   if (!filtersInitialized)
   {
     if (newTime < 1000) return;
+    /*
     upperFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
     upperRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
     lowerFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
     lowerRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+    */
+    upperFrontHeater.thermocouple = upperFrontTcReading;
+    upperRearHeater.thermocouple = upperRearTcReading;
+    lowerFrontHeater.thermocouple = lowerFrontTcReading;
+    lowerRearHeater.thermocouple = lowerRearTcReading;
     upperFrontHeater.tcFilter.initialize(upperFrontHeater.thermocouple);
     upperRearHeater.tcFilter.initialize(upperRearHeater.thermocouple);
     lowerFrontHeater.tcFilter.initialize(lowerFrontHeater.thermocouple);
@@ -229,6 +246,7 @@ void readThermocouples(void)
     filtersInitialized = true;
   }
 
+  /*
   upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(
     slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT), upperFrontHeater.thermocouple, 250.0)); // 57.0
   upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
@@ -237,6 +255,16 @@ void readThermocouples(void)
     slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT), lowerFrontHeater.thermocouple, 250.0)); // 4.4
   lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(
     slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_REAR), lowerRearHeater.thermocouple, 250.0));
+    */
+
+  upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(
+    slewRateLimit(upperFrontTcReading, upperFrontHeater.thermocouple, 250.0)); // 57.0
+  upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
+    slewRateLimit(upperRearTcReading, upperRearHeater.thermocouple, 250.0));
+  lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(
+    slewRateLimit(lowerFrontTcReading, lowerFrontHeater.thermocouple, 250.0)); // 4.4
+  lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(
+    slewRateLimit(lowerRearTcReading, lowerRearHeater.thermocouple, 250.0));
 
   ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
   urTcLimit.checkLimit(upperRearHeater.thermocouple);
@@ -423,6 +451,36 @@ void outputTemps(void)
   
   msg[0] = 0;
   strcat((char *)&msg[0], "Temps ");
+  itoa(intTempCUF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCUR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
+
+void outputRawTemps(void)
+{
+  uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
+  // 0000000000111111111122222222223
+  // 0123456789012345678901234567890
+  // Temps 1111 2222 3333 4444
+  uint8_t msg[30];
+  uint8_t buf[7];
+
+  intTempCUF =  (uint16_t) (upperFrontTcReading + 0.5);
+  intTempCUR =  (uint16_t) (upperRearTcReading  + 0.5);
+  intTempCLF =  (uint16_t) (lowerFrontTcReading + 0.5);
+  intTempCLR =  (uint16_t) (lowerRearTcReading  + 0.5);
+  
+  msg[0] = 0;
+  strcat((char *)&msg[0], "RawTemps ");
   itoa(intTempCUF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
@@ -629,6 +687,11 @@ void PeriodicOutputInfo()
     break;
     case 2:
       outputDomeState();
+      printPhase++;
+      break;
+    case 3:
+      handleRelayWatchdog();
+      outputRawTemps();
       printPhase++;
       break;
     
