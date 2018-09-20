@@ -133,31 +133,6 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
-// old values
-//PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
-// values based on 35% fixed duty cycle, SM = 2
-//PidIo upperFrontPidIo = {1000, 47, {5.863, 0.31, 0.0}};
-//PidIo upperRearPidIo  = {1000, 47, {16.706, 3.019, 0.0}};
-// values based on 65% fixed duty cycle, SM = 2
-//PidIo upperFrontPidIo = {1000, 47, {22.84614311, 2.42453115, 0.0}};
-//PidIo upperRearPidIo  = {1000, 47, {16.46018028, 1.771298719, 0.0}};
-// values based on 65% fixed duty cycle, SM = 1
-//PidIo upperFrontPidIo = {1000, 47, {45.69228622, 4.8490623, 0.0}};
-//PidIo upperRearPidIo  = {1000, 47, {32.92036057, 3.542597439, 0.0}};
-// values based on 65% fixed duty cycle, SM = 0.75
-//PidIo upperFrontPidIo = {1000, 47, {91.30531622, 14.26002669, 0.0}};
-//PidIo upperRearPidIo  = {1000, 47, {65.76952525, 10.36983619, 0.0}};
-// making stuff up #1
-//PidIo upperFrontPidIo = {1000, 47, {100.0, 25.0, 0.0}};
-//PidIo upperRearPidIo  = {1000, 47, {100.0, 25.0, 0.0}};
-// making stuff up #2
-//PidIo upperFrontPidIo = {1000, 47, {100.0, 35.0, 0.0}};
-//PidIo upperRearPidIo  = {1000, 47, {125.0, 35.0, 0.0}};
-// making stuff up #3
-//PidIo upperFrontPidIo = {1000, 47, {100.0, 45.0, 0.0}};
-//PidIo upperRearPidIo  = {1000, 47, {150.0, 45.0, 0.0}};
-// values based on 35% fixed duty cycle, SM = 2
 PidIo upperFrontPidIo = {1000, 47, {5.863, 5.0, 0.0}};
 PidIo upperRearPidIo  = {1000, 47, {16.706, 10.0, 0.0}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
@@ -247,12 +222,6 @@ void readThermocouples(void)
   if (!filtersInitialized)
   {
     if (newTime < 1000) return;
-    /*
-    upperFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
-    upperRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
-    lowerFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
-    lowerRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
-    */
     upperFrontHeater.thermocouple = upperFrontTcReading;
     upperRearHeater.thermocouple = upperRearTcReading;
     lowerFrontHeater.thermocouple = lowerFrontTcReading;
@@ -698,11 +667,6 @@ void PeriodicOutputInfo()
       outputDomeState();
       printPhase++;
       break;
-    case 3:
-      handleRelayWatchdog();
-      outputRawTemps();
-      printPhase++;
-      break;
     
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
@@ -782,9 +746,6 @@ void PeriodicOutputInfo()
       break;
 #endif
 #endif
-    case 11:
-      printPhase++;
-      break;
     default:
       printPhase = 0;
   }
