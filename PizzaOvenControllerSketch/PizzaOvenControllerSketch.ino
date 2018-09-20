@@ -62,8 +62,8 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 // Macros
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
-#define FIRMWARE_MINOR_VERSION   2
-#define FIRMWARE_BUILD_VERSION   2
+#define FIRMWARE_MINOR_VERSION   3
+#define FIRMWARE_BUILD_VERSION   0
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -109,6 +109,11 @@ uint8_t upperTempDiffExceededCount = 0;
 bool lowerTempDiffExceeded = false;
 uint8_t lowerTempDiffExceededCount = 0;
 
+double upperFrontTcReading;
+double upperRearTcReading;
+double lowerFrontTcReading;
+double lowerRearTcReading;
+
 Heater upperFrontHeater = {{true, 1200, 1300,  0, 100}, 0, 0, relayStateOff, false, 0.0};
 Heater upperRearHeater  = {{true, 1100, 1200,  0, 100}, 0, 0, relayStateOff, false, 0};
 Heater lowerFrontHeater = {{true,  600,  650, 50, 100}, 0, 0, relayStateOff, false, 0};
@@ -128,14 +133,8 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
-//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.001110517, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0010935,   0.4}};
-//PidIo upperFrontPidIo = {1000, 47, {0.175, 0.0005, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.175, 0.0005, 0.4}};
-//PidIo upperFrontPidIo = {1000, 47, {0.25, 0.0005, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.25, 0.0005, 0.4}};
-PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
-PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
+PidIo upperFrontPidIo = {1000, 47, {5.863, 5.0, 0.0}};
+PidIo upperRearPidIo  = {1000, 47, {16.706, 10.0, 0.0}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
                   upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd, DIRECT);
 PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRearPidIo.Setpoint,
@@ -215,13 +214,18 @@ void readThermocouples(void)
 
   oldTime = newTime;
 
+  upperFrontTcReading = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
+  upperRearTcReading = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
+  lowerFrontTcReading = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
+  lowerRearTcReading = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+
   if (!filtersInitialized)
   {
     if (newTime < 1000) return;
-    upperFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
-    upperRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
-    lowerFrontHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
-    lowerRearHeater.thermocouple = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+    upperFrontHeater.thermocouple = upperFrontTcReading;
+    upperRearHeater.thermocouple = upperRearTcReading;
+    lowerFrontHeater.thermocouple = lowerFrontTcReading;
+    lowerRearHeater.thermocouple = lowerRearTcReading;
     upperFrontHeater.tcFilter.initialize(upperFrontHeater.thermocouple);
     upperRearHeater.tcFilter.initialize(upperRearHeater.thermocouple);
     lowerFrontHeater.tcFilter.initialize(lowerFrontHeater.thermocouple);
@@ -230,13 +234,13 @@ void readThermocouples(void)
   }
 
   upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT), upperFrontHeater.thermocouple, 250.0)); // 57.0
+    slewRateLimit(upperFrontTcReading, upperFrontHeater.thermocouple, 250.0)); // 57.0
   upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_UPPER_REAR), upperRearHeater.thermocouple, 250.0));
+    slewRateLimit(upperRearTcReading, upperRearHeater.thermocouple, 250.0));
   lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_FRONT), lowerFrontHeater.thermocouple, 250.0)); // 4.4
+    slewRateLimit(lowerFrontTcReading, lowerFrontHeater.thermocouple, 250.0)); // 4.4
   lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(
-    slewRateLimit(readAD8495KTC(ANALOG_THERMO_LOWER_REAR), lowerRearHeater.thermocouple, 250.0));
+    slewRateLimit(lowerRearTcReading, lowerRearHeater.thermocouple, 250.0));
 
   ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
   urTcLimit.checkLimit(upperRearHeater.thermocouple);
@@ -437,6 +441,35 @@ void outputTemps(void)
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
+void outputRawTemps(void)
+{
+  uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
+  // 0000000000111111111122222222223
+  // 0123456789012345678901234567890
+  // Temps 1111 2222 3333 4444
+  uint8_t msg[30];
+  uint8_t buf[7];
+
+  intTempCUF =  (uint16_t) (upperFrontTcReading + 0.5);
+  intTempCUR =  (uint16_t) (upperRearTcReading  + 0.5);
+  intTempCLF =  (uint16_t) (lowerFrontTcReading + 0.5);
+  intTempCLR =  (uint16_t) (lowerRearTcReading  + 0.5);
+  
+  msg[0] = 0;
+  strcat((char *)&msg[0], "RawTemps ");
+  itoa(intTempCUF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCUR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLF, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  strcat((char *)&msg[0], " ");
+  itoa(intTempCLR, (char *)&buf[0], 10);
+  strcat((char *)&msg[0], (char *)&buf[0]);
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
 void outputCookingState(void)
 {
   //                                            0000000000111111111122222222223
@@ -616,17 +649,20 @@ void PeriodicOutputInfo()
       }
       break;
     case 1:
+      handleRelayWatchdog();
       outputTemps();
       outputAcInputStates();
       outputDoorStatus();
+      handleRelayWatchdog();
       outputCookingState();
       outputFailures();
       handleRelayWatchdog();
       outputRelayStates();
       outputPidDutyCycles();
       outputTimeInfo();
+      handleRelayWatchdog();
       printPhase++;
-    break;
+      break;
     case 2:
       outputDomeState();
       printPhase++;
@@ -710,9 +746,6 @@ void PeriodicOutputInfo()
       break;
 #endif
 #endif
-    case 11:
-      printPhase++;
-      break;
     default:
       printPhase = 0;
   }
@@ -1327,11 +1360,13 @@ void loop()
 
   // pet the watchdog
   wdt_reset();
+  handleRelayWatchdog();
 
   // Gather inputs and process
   adcReadRun();
   acInputsRun();
   readThermocouples();
+  handleRelayWatchdog();
   if (Serial.available() > 0)
   {
     serialCommWrapperHandleByte(Serial.read());
@@ -1354,6 +1389,7 @@ void loop()
     outputAcInputStates();
   }
 
+  handleRelayWatchdog();
 //poStateMachine.update();
   updateCookingStateMachine();
 
@@ -1368,8 +1404,11 @@ void loop()
 #ifdef USE_PID
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
+  handleRelayWatchdog();
   upperFrontPID.Compute();
+  handleRelayWatchdog();
   upperRearPID.Compute();
+  handleRelayWatchdog();
   ConvertHeaterPercentCounts();
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
   upperRearHeater.heaterCountsOn  = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
