@@ -72,7 +72,6 @@ static FSM poStateMachine = FSM(stateStandby);     //initialize state machine, s
 void requestPizzaOvenStart(void)
 {
   pizzaOvenStartRequested = true;
-  domeOn = true;
 }
 
 void requestPizzaOvenStop(void)
@@ -597,9 +596,8 @@ static void stateIdleUpdate()
   }
 
   // The error conditions are checked above, just check the start requested bit.
-  if (pizzaOvenStartRequested)
+  if (domeOn)
   {
-    domeOn = true;
     poStateMachine.transitionTo(statePreheat);
     return;
   }
