@@ -114,10 +114,17 @@ double upperRearTcReading;
 double lowerFrontTcReading;
 double lowerRearTcReading;
 
-Heater upperFrontHeater = {{true, 1200, 1300,  0, 100}, 0, 0, relayStateOff, false, 0.0};
-Heater upperRearHeater  = {{true, 1100, 1200,  0, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerFrontHeater = {{true,  600,  650, 50, 100}, 0, 0, relayStateOff, false, 0};
-Heater lowerRearHeater  = {{true,  575,  625,  0,  49}, 0, 0, relayStateOff, false, 0};
+#define DEFAULT_TRIAC_ON_PERCENT 0
+#define DEFAULT_TRIAC_OFF_PERCENT 100
+#define DEFAULT_LOWER_FRONT_ON_PERCENT 0
+#define DEFAULT_LOWER_FRONT_OFF_PERCENT 49
+#define DEFAULT_LOWER_REAR_ON_PERCENT 50
+#define DEFAULT_LOWER_REAR_OFF_PERCENT 100
+
+Heater upperFrontHeater = {{true, 1200, 1300,  DEFAULT_TRIAC_ON_PERCENT,       DEFAULT_TRIAC_OFF_PERCENT}, 0, 0, relayStateOff, false, 0.0};
+Heater upperRearHeater  = {{true, 1100, 1200,  DEFAULT_TRIAC_ON_PERCENT,       DEFAULT_TRIAC_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
+Heater lowerFrontHeater = {{true,  600,  650,  DEFAULT_LOWER_FRONT_ON_PERCENT, DEFAULT_LOWER_FRONT_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
+Heater lowerRearHeater  = {{true,  575,  625,  DEFAULT_LOWER_REAR_ON_PERCENT,  DEFAULT_LOWER_REAR_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
 
 // convenience array, could go into flash
 Heater *aHeaters[4] =
@@ -156,7 +163,7 @@ uint16_t GetInputValue(uint16_t *pValue, uint8_t *pBuf);
 float GetFloatInputValue(float *pValue, uint8_t *pBuf);
 void HeaterTimerInterrupt(void);
 void saveParametersToMemory(void);
-void readParametersFromMemory(void);
+static void readParametersFromMemory(void);
 static void handleIncomingMessage(uint8_t *pData, uint8_t length);
 bool needSave = false;
 
@@ -803,12 +810,23 @@ void saveParametersToMemory(void)
   pizzaMemoryWrite((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
 }
 
-void readParametersFromMemory(void)
+static void readParametersFromMemory(void)
 {
   pizzaMemoryRead((uint8_t*)&upperFrontHeater.parameter, offsetof(MemoryStore, upperFrontHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryRead((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryRead((uint8_t*)&lowerFrontHeater.parameter, offsetof(MemoryStore, lowerFrontHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryRead((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
+
+  // restore default percentages on read
+  upperFrontHeater.parameter.onPercent = DEFAULT_TRIAC_ON_PERCENT;
+  upperFrontHeater.parameter.offPercent = DEFAULT_TRIAC_OFF_PERCENT;
+  upperRearHeater.parameter.onPercent = DEFAULT_TRIAC_ON_PERCENT;
+  upperRearHeater.parameter.offPercent = DEFAULT_TRIAC_OFF_PERCENT;
+  lowerFrontHeater.parameter.onPercent = DEFAULT_LOWER_FRONT_ON_PERCENT;
+  lowerFrontHeater.parameter.offPercent = DEFAULT_LOWER_FRONT_OFF_PERCENT;
+  lowerRearHeater.parameter.onPercent = DEFAULT_LOWER_REAR_ON_PERCENT;
+  lowerRearHeater.parameter.offPercent = DEFAULT_LOWER_REAR_OFF_PERCENT;
+
   pizzaMemoryRead((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
   pizzaMemoryRead((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
 #ifdef USE_PID
