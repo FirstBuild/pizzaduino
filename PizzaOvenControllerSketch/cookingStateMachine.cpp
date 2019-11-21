@@ -15,7 +15,6 @@ static bool pizzaOvenStopRequested = false;
 static TcoAndFan tcoAndFan;
 static uint32_t currentTriacTimerCounter, oldTriacTimerCounter;
 static uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
-static float preheatStage1TerminationDelta = 150.0;
 static bool domeOn = true;
 static bool setpointIncreaseOccurred = false;
 static bool stoneIsPreheated = false;

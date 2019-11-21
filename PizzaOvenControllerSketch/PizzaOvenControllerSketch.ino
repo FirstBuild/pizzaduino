@@ -298,7 +298,7 @@ void readThermocouples(void)
   // Check differentials
   if (upperTempDiffExceeded == false)
   {
-    if(fabs(fabs(upperFrontHeater.thermocouple - upperFrontPidIo.Setpoint) - fabs(upperRearHeater.thermocouple - upperRearPidIo.Setpoint)) > 500)
+    if(fabs(fabs(upperFrontHeater.thermocouple - upperRearHeater.thermocouple) - fabs(upperFrontPidIo.Setpoint - upperRearPidIo.Setpoint)) > 500)
     {
       upperTempDiffExceededCount++; 
       if (upperTempDiffExceededCount >= 250) 
@@ -316,7 +316,7 @@ void readThermocouples(void)
   double lowerRearSetpoint = (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn) / 2;
   if (lowerTempDiffExceeded == false)
   {
-    if(fabs(fabs(lowerFrontHeater.thermocouple - lowerFrontSetpoint) - fabs(lowerRearHeater.thermocouple - lowerRearSetpoint)) > 250)
+    if(fabs(fabs(lowerFrontHeater.thermocouple - lowerRearHeater.thermocouple) - fabs(lowerFrontSetpoint - lowerRearSetpoint)) > 250)
     {
       lowerTempDiffExceededCount++; 
       if (lowerTempDiffExceededCount >= 250) 
@@ -488,6 +488,7 @@ void outputCookingState(void)
   static const uint8_t msgCooking[]  PROGMEM = "State Cooking";
   static const uint8_t msgStandbyBottom[]  PROGMEM = "State Idle";
   static const uint8_t msgCooldown[] PROGMEM = "State Cooldown";
+  static const uint8_t msgInvalid[] PROGMEM = "State INVALID";
   uint8_t msg[20];
   switch (getCookingState())
   {
@@ -511,6 +512,9 @@ void outputCookingState(void)
       break;
     case cookingCooldown:
       strcpy_P((char *)&msg[0], (char *)&msgCooldown[0]);
+      break;
+    default:
+      strcpy_P((char *)&msg[0], (char *)&msgInvalid[0]);
       break;
   }
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
@@ -637,7 +641,6 @@ void outputTimeInfo(void)
 void PeriodicOutputInfo()
 {
   static uint8_t printPhase = 0;
-  uint32_t maxTimeTestVar = (uint32_t)3 * 3600 * 1000;
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
     double pTerm;
