@@ -33,3 +33,4 @@ PizzaDuinoTests_tests
 objs/
 PizzaDuinoTests_tests.txt
 gcov/
+.DS_Store
