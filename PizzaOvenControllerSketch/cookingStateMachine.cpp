@@ -640,6 +640,7 @@ static void stateCoolDownEnter()
   upperRearPidIo.Output = 0.0;
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
+  stoneIsPreheated = false;
 }
 
 static void stateCoolDownUpdate()
@@ -676,4 +677,3 @@ static void stateCoolDownExit()
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
 }
-
