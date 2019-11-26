@@ -258,6 +258,9 @@ static void statePreheatStoneOnlyEnter()
   triacTimeBase = 0;
   relayTimeBase = 0;
   setpointIncreaseOccurred = false;
+
+  upperFrontPID.SetMode(MANUAL);
+  upperRearPID.SetMode(MANUAL);
 }
 
 static void statePreheatStoneOnlyUpdate()
@@ -343,7 +346,7 @@ static void statePreheatEnter()
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
-  
+
   upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
   upperFrontPID.SetMode(AUTOMATIC);
   
@@ -544,6 +547,8 @@ static void stateHeatCycleExit()
 static void stateIdleEnter()
 {
   Serial.println(F("DEBUG entering idle"));
+  upperFrontPID.SetMode(MANUAL);
+  upperRearPID.SetMode(MANUAL);
 }
 
 static void stateIdleUpdate()

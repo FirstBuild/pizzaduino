@@ -141,12 +141,18 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 // PID stuff
 #define MAX_PID_OUTPUT 100
 // Define PID values here
-#define PID_UF_KP 1.1
-#define PID_UF_KI 0.00124
-#define PID_UF_KD 0.0
+//#define PID_UF_KP 1.0
+//#define PID_UF_KI 0.00124
+//#define PID_UF_KD 0.0
+//#define PID_UR_KP 1.1
+//#define PID_UR_KI 0.00129
+//#define PID_UR_KD 0.0
+#define PID_UF_KP 1.0
+#define PID_UF_KI 0.015
+#define PID_UF_KD 0.4
 #define PID_UR_KP 1.1
-#define PID_UR_KI 0.00129
-#define PID_UR_KD 0.0
+#define PID_UR_KI 0.025
+#define PID_UR_KD 0.4
 //PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
 //PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
 PidIo upperFrontPidIo = {1000, 47, {PID_UF_KP, PID_UF_KI, PID_UF_KD}};
@@ -1441,6 +1447,28 @@ void loop()
 #ifdef USE_PID
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
+  if ((getCookingState() == cookingPreheat) && (upperFrontPidIo.Output > 98)) 
+  {
+    if (upperFrontHeater.thermocouple < upperFrontPidIo.Setpoint) 
+    {
+      upperFrontPidIo.Setpoint = upperFrontHeater.thermocouple;
+    }
+  }
+  if ((getCookingState() == cookingPreheat) && (upperRearPidIo.Output > 98)) 
+  {
+    if (upperRearHeater.thermocouple < upperRearPidIo.Setpoint) 
+    {
+      upperRearPidIo.Setpoint = upperRearHeater.thermocouple;
+    }
+  }
+  // if ((getCookingState() == cookingPreheat) && (upperFrontHeater.thermocouple < (upperFrontPidIo.Setpoint - 20)))
+  // {
+  //   upperFrontPidIo.Setpoint -= 15;
+  // }
+  // if ((getCookingState() == cookingPreheat) && (upperRearHeater.thermocouple < (upperRearPidIo.Setpoint - 20)))
+  // {
+  //   upperRearPidIo.Setpoint -= 15;
+  // }
   handleRelayWatchdog();
   upperFrontPID.Compute();
   handleRelayWatchdog();
