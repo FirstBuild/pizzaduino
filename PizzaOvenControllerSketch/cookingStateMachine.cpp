@@ -18,6 +18,8 @@ static uint32_t currentRelayTimerCounter, oldRelayTimerCounter;
 static bool domeOn = true;
 static bool setpointIncreaseOccurred = false;
 static bool stoneIsPreheated = false;
+static bool upperFrontPreheated = false;
+static bool upperRearPreheated = false;
 
 #ifdef USE_PID
 // PID stuff
@@ -154,6 +156,8 @@ static void stateStandbyEnter()
   Serial.println(F("DEBUG entering standby"));
   AllHeatersOffStateClear();
   CoolingFanControl(coolingFanOff);
+  upperFrontPID.SetMode(MANUAL);
+  upperRearPID.SetMode(MANUAL);
 }
 
 static void stateStandbyUpdate()
@@ -258,6 +262,10 @@ static void statePreheatStoneOnlyEnter()
   triacTimeBase = 0;
   relayTimeBase = 0;
   setpointIncreaseOccurred = false;
+
+
+  upperFrontPID.SetMode(MANUAL);
+  upperRearPID.SetMode(MANUAL);
 }
 
 static void statePreheatStoneOnlyUpdate()
@@ -345,10 +353,17 @@ static void statePreheatEnter()
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
   
   upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
+  Serial.print(F("Seeding UF PID value to "));
+  Serial.println(upperFrontPidIo.Output);
   upperFrontPID.SetMode(AUTOMATIC);
   
   upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
+  Serial.print(F("Seeding UR PID value to "));
+  Serial.println(upperRearPidIo.Output);
   upperRearPID.SetMode(AUTOMATIC);
+
+  upperFrontPreheated = false;
+  upperRearPreheated = false;
 }
 
 static void statePreheatUpdate()
@@ -416,10 +431,20 @@ static void statePreheatUpdate()
     return;
   }
 
+  if ( upperFrontHeater.thermocouple >= (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2) 
+  {
+    upperFrontPreheated = true;
+  }
+
+  if (  upperRearHeater.thermocouple >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2)
+  {
+    upperRearPreheated = true;
+  }
+
   if ((((lowerFrontHeater.thermocouple >= (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn)/2) &&
       (  lowerRearHeater.thermocouple >= (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn)/2)) || stoneIsPreheated) &&
-      ( upperFrontHeater.thermocouple >= (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2) &&
-      (  upperRearHeater.thermocouple >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2))
+      ( upperFrontPreheated ) &&
+      ( upperRearPreheated ))
   {
     stoneIsPreheated = true;
     poStateMachine.transitionTo(stateHeatCycle);
@@ -449,13 +474,16 @@ static void stateHeatCycleEnter()
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
-  
-  upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
-  upperFrontPID.SetMode(AUTOMATIC);
-  
-  upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
-  upperRearPID.SetMode(AUTOMATIC);
 
+  if (upperFrontPID.GetMode() == MANUAL) {
+    upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
+    upperFrontPID.SetMode(AUTOMATIC);
+  }
+
+  if (upperRearPID.GetMode() == MANUAL) {
+    upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
+    upperRearPID.SetMode(AUTOMATIC);
+  }
 }
 
 static void stateHeatCycleUpdate()
@@ -544,6 +572,8 @@ static void stateHeatCycleExit()
 static void stateIdleEnter()
 {
   Serial.println(F("DEBUG entering idle"));
+  upperFrontPID.SetMode(MANUAL);
+  upperRearPID.SetMode(MANUAL);
 }
 
 static void stateIdleUpdate()

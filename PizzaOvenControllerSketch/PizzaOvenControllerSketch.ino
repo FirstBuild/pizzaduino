@@ -147,6 +147,10 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #define PID_UR_KP 1.1
 #define PID_UR_KI 0.00129
 #define PID_UR_KD 0.0
+PidParameters pidGainsFront_Aggressive = {0.9, 0.02, 0.0};
+PidParameters pidGainsRear_Aggressive = {0.75, 0.02, 0.0};
+PidParameters pidGainsFront_Normal = {1.0, 0.00100, 0.0};
+PidParameters pidGainsRear_Normal = {1.0, 0.00100, 0.0};
 //PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
 //PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
 PidIo upperFrontPidIo = {1000, 47, {PID_UF_KP, PID_UF_KI, PID_UF_KD}};
@@ -1439,8 +1443,29 @@ void loop()
 
   // PID
 #ifdef USE_PID
+
+  #define PID_GAIN_SHIFT_TEMP_DIFF 25.0
+  handleRelayWatchdog();
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
+
+  // set gains
+  if (fabs(upperFrontPidIo.Setpoint - upperFrontHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) {
+    // use normal gains
+    upperFrontPID.SetTunings(pidGainsFront_Normal.kp, pidGainsFront_Normal.ki, pidGainsFront_Normal.kd);
+  } else {
+    // use aggressive gains
+    upperFrontPID.SetTunings(pidGainsFront_Aggressive.kp, pidGainsFront_Aggressive.ki, pidGainsFront_Aggressive.kd);
+  }
+
+  if (fabs(upperRearPidIo.Setpoint - upperRearHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) {
+    // use normal gains
+    upperRearPID.SetTunings(pidGainsRear_Normal.kp, pidGainsRear_Normal.ki, pidGainsRear_Normal.kd);
+  } else {
+    // use aggressive gains
+    upperRearPID.SetTunings(pidGainsRear_Aggressive.kp, pidGainsRear_Aggressive.ki, pidGainsRear_Aggressive.kd);
+  }
+
   handleRelayWatchdog();
   upperFrontPID.Compute();
   handleRelayWatchdog();
