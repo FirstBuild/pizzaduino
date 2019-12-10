@@ -63,7 +63,7 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   3
-#define FIRMWARE_BUILD_VERSION   2
+#define FIRMWARE_BUILD_VERSION   3
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -140,8 +140,20 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
-PidIo upperFrontPidIo = {1000, 47, {5.863, 5.0, 0.0}};
-PidIo upperRearPidIo  = {1000, 47, {16.706, 10.0, 0.0}};
+// Define PID values here
+#define PID_UF_KP 1.1
+#define PID_UF_KI 0.00124
+#define PID_UF_KD 0.0
+#define PID_UR_KP 1.1
+#define PID_UR_KI 0.00129
+#define PID_UR_KD 0.0
+
+PidParameters pidGainsFront_Aggressive = {0.7, 0.019, 0.0};
+PidParameters pidGainsRear_Aggressive = {0.75, 0.02, 0.0};
+PidParameters pidGainsFront_Normal = {5.0, 0.00130, 0.0};
+PidParameters pidGainsRear_Normal = {5.0, 0.00150, 0.0};
+PidIo upperFrontPidIo = {1000, 47, {PID_UF_KP, PID_UF_KI, PID_UF_KD}};
+PidIo upperRearPidIo  = {1000, 47, {PID_UR_KP, PID_UR_KI, PID_UR_KD}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
                   upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd, DIRECT);
 PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRearPidIo.Setpoint,
@@ -680,18 +692,18 @@ void PeriodicOutputInfo()
     
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
-    case 2:
+    case 3:
       Serial.print(F("DEBUG, Time, UR KP, UR KI, UR KD, UR Raw, UR Temp, UR DC, UR Setpoint, UR pTerm, "));
       printPhase++;
       break;
-    case 3:
+    case 4:
       Serial.println(F("UR iTerm, UR dTerm, UF KP, UF KI, UF KD, UF Raw, UF Temp, UF DC, UF Setpoint, UF pTerm, UF iTerm, UF dTerm"));
       printPhase++;
       break;
-    case 4:
+    case 5:
       printPhase++;
       break;
-    case 5:
+    case 6:
       Serial.print(F("DEBUG, "));
       Serial.print(millis());
       Serial.print(F(", "));
@@ -703,7 +715,7 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       printPhase++;
       break;
-    case 6:
+    case 7:
       Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
       Serial.print(F(", "));
       Serial.print(upperRearHeater.thermocouple);
@@ -714,7 +726,7 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       printPhase++;
       break;
-    case 7:
+    case 8:
       upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
       Serial.print(pTerm, 6);
       Serial.print(F(", "));
@@ -724,7 +736,7 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       printPhase++;
       break;
-    case 8:
+    case 9:
       Serial.print(upperFrontPID.GetKp(), 7);
       Serial.print(F(", "));
       Serial.print(upperFrontPID.GetKi(), 7);
@@ -733,7 +745,7 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       printPhase++;
       break;
-    case 9:
+    case 10:
       Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_FRONT));
       Serial.print(F(", "));
       Serial.print(upperFrontHeater.thermocouple);
@@ -744,7 +756,7 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       printPhase++;
       break;
-    case 10:
+    case 11:
       upperFrontPID.GetTerms(&pTerm, &iTerm, &dTerm);
       Serial.print(pTerm, 6);
       Serial.print(F(", "));
@@ -912,7 +924,7 @@ void setup()
 
   serialCommWrapperInit(sendSerialByte, handleIncomingMessage);
   handleIncomingMessage((uint8_t *)"v", 1);
-  
+
   pizzaMemoryInitResponse = pizzaMemoryInit();
 
   if (pizzaMemoryWasEmpty == pizzaMemoryInitResponse)
@@ -925,7 +937,7 @@ void setup()
     Serial.println(F("DEBUG Reading parameters from EEPROM memory."));
     readParametersFromMemory();
   }
-
+  
   acInputsInit();
 
   // Initialize Timer1
@@ -956,11 +968,17 @@ void setup()
   upperFrontPID.SetMode(MANUAL);
   upperFrontPID.SetOutputLimits(0, MAX_PID_OUTPUT);
   upperFrontPID.SetSampleTime(4000);
+  upperFrontPidIo.pidParameters.kp = PID_UF_KP;
+  upperFrontPidIo.pidParameters.ki = PID_UF_KI;
+  upperFrontPidIo.pidParameters.kd = PID_UF_KD;
   upperFrontPID.SetTunings(upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd);
 
   upperRearPID.SetMode(MANUAL);
   upperRearPID.SetOutputLimits(0, MAX_PID_OUTPUT);
   upperRearPID.SetSampleTime(4000);
+  upperRearPidIo.pidParameters.kp = PID_UR_KP;
+  upperRearPidIo.pidParameters.ki = PID_UR_KI;
+  upperRearPidIo.pidParameters.kd = PID_UR_KD;
   upperRearPID.SetTunings(upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd);
 #endif
 
@@ -1423,8 +1441,29 @@ void loop()
 
   // PID
 #ifdef USE_PID
+
+  #define PID_GAIN_SHIFT_TEMP_DIFF 25.0
+  handleRelayWatchdog();
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
+
+  // set gains
+  if ((fabs(upperFrontPidIo.Setpoint - upperFrontHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) && (getCookingState() == cookingPreheat)) {
+    // use normal gains
+    upperFrontPID.SetTunings(pidGainsFront_Normal.kp, pidGainsFront_Normal.ki, pidGainsFront_Normal.kd);
+  } else {
+    // use aggressive gains
+    upperFrontPID.SetTunings(pidGainsFront_Aggressive.kp, pidGainsFront_Aggressive.ki, pidGainsFront_Aggressive.kd);
+  }
+
+  if ((fabs(upperRearPidIo.Setpoint - upperRearHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) && (getCookingState() == cookingPreheat)) {
+    // use normal gains
+    upperRearPID.SetTunings(pidGainsRear_Normal.kp, pidGainsRear_Normal.ki, pidGainsRear_Normal.kd);
+  } else {
+    // use aggressive gains
+    upperRearPID.SetTunings(pidGainsRear_Aggressive.kp, pidGainsRear_Aggressive.ki, pidGainsRear_Aggressive.kd);
+  }
+
   handleRelayWatchdog();
   upperFrontPID.Compute();
   handleRelayWatchdog();
@@ -1436,4 +1475,3 @@ void loop()
 
 #endif
 }
-
