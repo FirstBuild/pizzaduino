@@ -965,7 +965,6 @@ void setup()
   ConvertHeaterPercentCounts();
 
 #ifdef USE_PID
-  Serial.println(F("Setting tunings"));
   upperFrontPID.SetMode(MANUAL);
   upperFrontPID.SetOutputLimits(0, MAX_PID_OUTPUT);
   upperFrontPID.SetSampleTime(4000);
