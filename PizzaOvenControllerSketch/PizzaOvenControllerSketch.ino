@@ -63,7 +63,7 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   3
-#define FIRMWARE_BUILD_VERSION   2
+#define FIRMWARE_BUILD_VERSION   3
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -147,12 +147,11 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #define PID_UR_KP 1.1
 #define PID_UR_KI 0.00129
 #define PID_UR_KD 0.0
-PidParameters pidGainsFront_Aggressive = {0.9, 0.02, 0.0};
+
+PidParameters pidGainsFront_Aggressive = {0.7, 0.019, 0.0};
 PidParameters pidGainsRear_Aggressive = {0.75, 0.02, 0.0};
-PidParameters pidGainsFront_Normal = {1.0, 0.00100, 0.0};
-PidParameters pidGainsRear_Normal = {1.0, 0.00100, 0.0};
-//PidIo upperFrontPidIo = {1000, 47, {0.9, 0.00113, 0.4}};
-//PidIo upperRearPidIo  = {1000, 47, {0.6, 0.00107, 0.4}};
+PidParameters pidGainsFront_Normal = {5.0, 0.00130, 0.0};
+PidParameters pidGainsRear_Normal = {5.0, 0.00150, 0.0};
 PidIo upperFrontPidIo = {1000, 47, {PID_UF_KP, PID_UF_KI, PID_UF_KD}};
 PidIo upperRearPidIo  = {1000, 47, {PID_UR_KP, PID_UR_KI, PID_UR_KD}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
@@ -1450,7 +1449,7 @@ void loop()
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
 
   // set gains
-  if (fabs(upperFrontPidIo.Setpoint - upperFrontHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) {
+  if ((fabs(upperFrontPidIo.Setpoint - upperFrontHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) && (getCookingState() == cookingPreheat)) {
     // use normal gains
     upperFrontPID.SetTunings(pidGainsFront_Normal.kp, pidGainsFront_Normal.ki, pidGainsFront_Normal.kd);
   } else {
@@ -1458,7 +1457,7 @@ void loop()
     upperFrontPID.SetTunings(pidGainsFront_Aggressive.kp, pidGainsFront_Aggressive.ki, pidGainsFront_Aggressive.kd);
   }
 
-  if (fabs(upperRearPidIo.Setpoint - upperRearHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) {
+  if ((fabs(upperRearPidIo.Setpoint - upperRearHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) && (getCookingState() == cookingPreheat)) {
     // use normal gains
     upperRearPID.SetTunings(pidGainsRear_Normal.kp, pidGainsRear_Normal.ki, pidGainsRear_Normal.kd);
   } else {

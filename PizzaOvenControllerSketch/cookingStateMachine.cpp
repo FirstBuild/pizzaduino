@@ -431,12 +431,13 @@ static void statePreheatUpdate()
     return;
   }
 
-  if ( upperFrontHeater.thermocouple >= (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2) 
+  #define PREHEAT_DONE_OFFSET 5.0
+  if ((upperFrontHeater.thermocouple + PREHEAT_DONE_OFFSET) >= (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2) 
   {
     upperFrontPreheated = true;
   }
 
-  if (  upperRearHeater.thermocouple >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2)
+  if ((upperRearHeater.thermocouple + PREHEAT_DONE_OFFSET) >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2)
   {
     upperRearPreheated = true;
   }
