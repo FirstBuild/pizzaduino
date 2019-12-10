@@ -353,13 +353,9 @@ static void statePreheatEnter()
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
   
   upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
-  Serial.print(F("Seeding UF PID value to "));
-  Serial.println(upperFrontPidIo.Output);
   upperFrontPID.SetMode(AUTOMATIC);
   
   upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
-  Serial.print(F("Seeding UR PID value to "));
-  Serial.println(upperRearPidIo.Output);
   upperRearPID.SetMode(AUTOMATIC);
 
   upperFrontPreheated = false;
