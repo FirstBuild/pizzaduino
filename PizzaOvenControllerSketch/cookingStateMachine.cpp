@@ -19,15 +19,19 @@ static bool domeOn = true;
 static bool setpointIncreaseOccurred = false;
 static bool stoneIsPreheated = false;
 static bool upperFrontPreheated = false;
+#ifdef CONFIGURATION_ORIGINAL
 static bool upperRearPreheated = false;
+#endif
 
 #ifdef USE_PID
 // PID stuff
 #define MAX_PID_OUTPUT 100
 extern PidIo upperFrontPidIo;
-extern PidIo upperRearPidIo;
 extern PID upperFrontPID;
+#ifdef CONFIGURATION_ORIGINAL
 extern PID upperRearPID;
+extern PidIo upperRearPidIo;
+#endif
 #endif
  
 //------------------------------------------
@@ -157,7 +161,9 @@ static void stateStandbyEnter()
   AllHeatersOffStateClear();
   CoolingFanControl(coolingFanOff);
   upperFrontPID.SetMode(MANUAL);
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPID.SetMode(MANUAL);
+  #endif
 }
 
 static void stateStandbyUpdate()
@@ -169,10 +175,15 @@ static void stateStandbyUpdate()
     {
       poStateMachine.transitionTo(stateWaitForDlb);
     }
-    else if ((upperFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15) ||
-             (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_TEMP + 15) ||
-             (lowerFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15) ||
-             (lowerRearHeater.thermocouple  > COOL_DOWN_EXIT_TEMP + 15))
+    else if ((upperFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15)
+             #ifdef CONFIGURATION_ORIGINAL
+             || (upperRearHeater.thermocouple  > COOL_DOWN_EXIT_TEMP + 15)
+             #endif
+             || (lowerFrontHeater.thermocouple > COOL_DOWN_EXIT_TEMP + 15)
+             #ifdef CONFIGURATION_ORIGINAL
+             || (lowerRearHeater.thermocouple  > COOL_DOWN_EXIT_TEMP + 15)
+             #endif
+             )
     {
       poStateMachine.transitionTo(stateCoolDown);
     }
@@ -243,11 +254,12 @@ double getUFSeedValue(double t)
    return 0.000042266777983124 * t * t - 0.0083436994 * t + 7.0316553821;
 }
 
+#ifdef CONFIGURATION_ORIGINAL
 double getURSeedValue(double t)
 {
    return 0.0000549012226585957 * t * t - 0.0238419207 * t + 11.2096886045;
-
 }
+#endif
 
 //------------------------------------------
 //state machine statePreheatStoneOnly
@@ -265,7 +277,9 @@ static void statePreheatStoneOnlyEnter()
 
 
   upperFrontPID.SetMode(MANUAL);
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPID.SetMode(MANUAL);
+  #endif
 }
 
 static void statePreheatStoneOnlyUpdate()
@@ -294,14 +308,18 @@ static void statePreheatStoneOnlyUpdate()
 
   // force triacs off
   upperFrontHeater.relayState = relayStateOff;
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearHeater.relayState = relayStateOff;
+  #endif
   UpdateHeaterHardware();
 
   // Handle relay control
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
     UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
+    #endif
 
     UpdateHeaterHardware();
 
@@ -321,8 +339,12 @@ static void statePreheatStoneOnlyUpdate()
   }
   else
   {
-    if (((lowerFrontHeater.thermocouple >= lowerFrontHeater.parameter.tempSetPointLowOn) &&
-        (lowerRearHeater.thermocouple >= lowerRearHeater.parameter.tempSetPointLowOn)) || stoneIsPreheated)
+    if ((
+        (lowerFrontHeater.thermocouple >= lowerFrontHeater.parameter.tempSetPointLowOn)
+        #ifdef CONFIGURATION_ORIGINAL
+        && (lowerRearHeater.thermocouple >= lowerRearHeater.parameter.tempSetPointLowOn)
+        #endif
+        ) || stoneIsPreheated)
     {
       stoneIsPreheated = true;
       poStateMachine.transitionTo(stateIdle);
@@ -350,16 +372,22 @@ static void statePreheatEnter()
   oldTriacTimerCounter = 100000;
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
+  #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
+  #endif
   
   upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
   upperFrontPID.SetMode(AUTOMATIC);
   
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
   upperRearPID.SetMode(AUTOMATIC);
+  #endif
 
   upperFrontPreheated = false;
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPreheated = false;
+  #endif
 }
 
 static void statePreheatUpdate()
@@ -392,7 +420,9 @@ static void statePreheatUpdate()
   {
 #ifdef USE_PID
     UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
+    #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControlWithPID(&upperRearHeater, currentTriacTimerCounter);
+    #endif
 #else
     UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
@@ -407,7 +437,9 @@ static void statePreheatUpdate()
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
     UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
+    #endif
 
     UpdateHeaterHardware();
 
@@ -433,15 +465,24 @@ static void statePreheatUpdate()
     upperFrontPreheated = true;
   }
 
+  #ifdef CONFIGURATION_ORIGINAL
   if ((upperRearHeater.thermocouple + PREHEAT_DONE_OFFSET) >= (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn)/2)
   {
     upperRearPreheated = true;
   }
+  #endif
 
-  if ((((lowerFrontHeater.thermocouple >= (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn)/2) &&
-      (  lowerRearHeater.thermocouple >= (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn)/2)) || stoneIsPreheated) &&
-      ( upperFrontPreheated ) &&
-      ( upperRearPreheated ))
+  if (((
+      (lowerFrontHeater.thermocouple >= (lowerFrontHeater.parameter.tempSetPointHighOff + lowerFrontHeater.parameter.tempSetPointLowOn)/2) 
+      #ifdef CONFIGURATION_ORIGINAL
+      && (lowerRearHeater.thermocouple >= (lowerRearHeater.parameter.tempSetPointHighOff + lowerRearHeater.parameter.tempSetPointLowOn)/2)
+      #endif
+      ) || stoneIsPreheated) 
+      && ( upperFrontPreheated ) 
+      #ifdef CONFIGURATION_ORIGINAL
+      && ( upperRearPreheated )
+      #endif
+      )
   {
     stoneIsPreheated = true;
     poStateMachine.transitionTo(stateHeatCycle);
@@ -470,17 +511,21 @@ static void stateHeatCycleEnter()
   oldRelayTimerCounter = 100000;
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
+  #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
+  #endif
 
   if (upperFrontPID.GetMode() == MANUAL) {
     upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
     upperFrontPID.SetMode(AUTOMATIC);
   }
 
+  #ifdef CONFIGURATION_ORIGINAL
   if (upperRearPID.GetMode() == MANUAL) {
     upperRearPidIo.Output = getURSeedValue(upperRearHeater.thermocouple);
     upperRearPID.SetMode(AUTOMATIC);
   }
+  #endif
 }
 
 static void stateHeatCycleUpdate()
@@ -513,10 +558,14 @@ static void stateHeatCycleUpdate()
   {
 #ifdef USE_PID
     UpdateHeatControlWithPID(&upperFrontHeater, currentTriacTimerCounter);
+    #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControlWithPID(&upperRearHeater, currentTriacTimerCounter);
+    #endif
 #else
     UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
+    #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
+    #endif
 #endif
 
     UpdateHeaterHardware();
@@ -528,7 +577,9 @@ static void stateHeatCycleUpdate()
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
     UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
+    #endif
 
     UpdateHeaterHardware();
 
@@ -570,7 +621,9 @@ static void stateIdleEnter()
 {
   Serial.println(F("DEBUG entering idle"));
   upperFrontPID.SetMode(MANUAL);
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPID.SetMode(MANUAL);
+  #endif
 }
 
 static void stateIdleUpdate()
@@ -600,14 +653,18 @@ static void stateIdleUpdate()
 
   // force triacs off
   upperFrontHeater.relayState = relayStateOff;
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearHeater.relayState = relayStateOff;
+  #endif
   UpdateHeaterHardware();
 
   // Handle relay control
   if (currentRelayTimerCounter != oldRelayTimerCounter)
   {
     UpdateHeatControl(&lowerFrontHeater, currentRelayTimerCounter);
+    #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControl(&lowerRearHeater, currentRelayTimerCounter);
+    #endif
 
     UpdateHeaterHardware();
 
@@ -663,8 +720,10 @@ static void stateCoolDownEnter()
   AllHeatersOffStateClear();
   upperFrontPID.SetMode(MANUAL);
   upperFrontPidIo.Output = 0.0;
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPID.SetMode(MANUAL);
   upperRearPidIo.Output = 0.0;
+  #endif
   pizzaOvenStartRequested = false;
   pizzaOvenStopRequested = false;
   stoneIsPreheated = false;
@@ -680,10 +739,16 @@ static void stateCoolDownUpdate()
     return;
   }
 
-  if ((upperFrontHeater.thermocouple <= COOL_DOWN_EXIT_TEMP) &&
-      (upperRearHeater.thermocouple  <= COOL_DOWN_EXIT_TEMP) &&
-      (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_TEMP) &&
-      (lowerRearHeater.thermocouple  <= COOL_DOWN_EXIT_TEMP))
+  if (
+      (upperFrontHeater.thermocouple <= COOL_DOWN_EXIT_TEMP) 
+      #ifdef CONFIGURATION_ORIGINAL
+      && (upperRearHeater.thermocouple  <= COOL_DOWN_EXIT_TEMP) 
+      #endif
+      && (lowerFrontHeater.thermocouple <= COOL_DOWN_EXIT_TEMP) 
+      #ifdef CONFIGURATION_ORIGINAL
+      && (lowerRearHeater.thermocouple  <= COOL_DOWN_EXIT_TEMP)
+      #endif
+      )
   {
     CoolingFanControl(coolingFanOff);
     poStateMachine.transitionTo(stateStandby);

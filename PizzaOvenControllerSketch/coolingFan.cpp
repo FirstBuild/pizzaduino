@@ -35,8 +35,8 @@ void CoolingFanControl(CoolingFanSpeed speed)
 
   if (lastSpeed != speed)
   {
-    switch(speed) {
     Serial.println(F("DEBUG Changing the state of the cooling fan."));
+    switch(speed) {
       default:
       case coolingFanOff:
         changeRelayState(COOLING_FAN_RELAY, relayStateOff);

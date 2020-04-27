@@ -531,7 +531,6 @@ void outputTemps(void)
 
 void outputRawTemps(void)
 {
-  uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
   // 0000000000111111111122222222223
   // 0123456789012345678901234567890
   // Temps 1111 2222 3333 4444
@@ -614,14 +613,14 @@ void outputFailures(void)
   #ifdef CONFIGURATION_ORIGINAL
   static const uint8_t msgUpperDiffExceeded[]   PROGMEM = "FAIL: upper_diff_exceeded";
   static const uint8_t msgLowerDiffExceeded[]   PROGMEM = "FAIL: lower_diff_exceeded";
+  static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "FAIL: ur_overtemp";
+  static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "FAIL: lr_overtemp";
   #endif
   static const uint8_t msgWatchdogReset[]       PROGMEM = "WARN: watchdog_reset";
   static const uint8_t msgTcoFailure[]          PROGMEM = "FAIL: tco_failure";
   static const uint8_t msgCoolingFanFailure[]   PROGMEM = "FAIL: cooling_fan";
   static const uint8_t msgUfTcOvertempFailure[] PROGMEM = "FAIL: uf_overtemp";
-  static const uint8_t msgUrTcOvertempFailure[] PROGMEM = "FAIL: ur_overtemp";
   static const uint8_t msgLfTcOvertempFailure[] PROGMEM = "FAIL: lf_overtemp";
-  static const uint8_t msgLrTcOvertempFailure[] PROGMEM = "FAIL: lr_overtemp";
   static const uint8_t msgDoorDropped[]         PROGMEM = "FAIL: door_dropped";
   uint8_t msg[31];
   
@@ -646,15 +645,16 @@ void outputFailures(void)
     serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   
-  if (urTcTempLimitFailed != 0)
-  {
-    strcpy_P((char *)&msg[0], (char *)&msgUrTcOvertempFailure[0]);
-    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
-  }  
-  
   if (lfTcTempLimitFailed != 0)
   {
     strcpy_P((char *)&msg[0], (char *)&msgLfTcOvertempFailure[0]);
+    serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
+  }  
+  
+  #ifdef CONFIGURATION_ORIGINAL
+  if (urTcTempLimitFailed != 0)
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgUrTcOvertempFailure[0]);
     serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
   
@@ -664,7 +664,6 @@ void outputFailures(void)
     serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
 
-  #ifdef CONFIGURATION_ORIGINAL
   if (upperTempDiffExceeded)
   {
     strcpy_P((char *)&msg[0], (char *)&msgUpperDiffExceeded[0]);
