@@ -50,9 +50,11 @@
 
 static TcoAndFan tcoAndFan;
 static TcLimitCheck ufTcLimit(1400, 30000);
-static TcLimitCheck urTcLimit(1400, 30000);
 static TcLimitCheck lfTcLimit(1000, 5000);
+#ifdef CONFIGURATION_ORIGINAL
+static TcLimitCheck urTcLimit(1400, 30000);
 static TcLimitCheck lrTcLimit(1000, 5000);
+#endif
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffff)
@@ -61,9 +63,16 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 //------------------------------------------
 // Macros
 //------------------------------------------
+#ifdef CONFIGURATION_ORIGINAL
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   3
 #define FIRMWARE_BUILD_VERSION   3
+#endif
+#ifdef CONFIGURATION_LOW_COST
+#define FIRMWARE_MAJOR_VERSION   20
+#define FIRMWARE_MINOR_VERSION   0
+#define FIRMWARE_BUILD_VERSION   0
+#endif
 
 const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
@@ -94,39 +103,58 @@ uint16_t relayPeriodSeconds = 60;
 uint16_t doorDeployCount = 0;
 bool doorHasDeployed = false;
 DigitalInputDebounced doorInput(DOOR_STATUS_INPUT, false, true);
+#ifdef CONFIGURATION_LOW_COST
+DigitalInputDebounced lockMotorHomeInput(DOOR_LOCK_MOTOR_HOME_PIN, false, false);
+#endif
+
 
 bool ufTcTempLimitFailed = false;
 uint16_t ufTcLimitExceededCount = 0;
-bool urTcTempLimitFailed = false;
-uint16_t urTcLimitExceededCount = 0;
 bool lfTcTempLimitFailed = false;
 uint16_t lfTcLimitExceededCount = 0;
+#ifdef CONFIGURATION_ORIGINAL
+bool urTcTempLimitFailed = false;
+uint16_t urTcLimitExceededCount = 0;
 bool lrTcTempLimitFailed = false;
 uint16_t lrTcLimitExceededCount = 0;
+#endif
 
+#ifdef CONFIGURATION_ORIGINAL
 bool upperTempDiffExceeded = false;
 uint8_t upperTempDiffExceededCount = 0;
 bool lowerTempDiffExceeded = false;
 uint8_t lowerTempDiffExceededCount = 0;
+#endif
 
 double upperFrontTcReading;
-double upperRearTcReading;
 double lowerFrontTcReading;
+#ifdef CONFIGURATION_ORIGINAL
+double upperRearTcReading;
 double lowerRearTcReading;
+#endif
 
 #define DEFAULT_TRIAC_ON_PERCENT 0
 #define DEFAULT_TRIAC_OFF_PERCENT 100
+#ifdef CONFIGURATION_ORIGINAL
 #define DEFAULT_LOWER_FRONT_ON_PERCENT 0
 #define DEFAULT_LOWER_FRONT_OFF_PERCENT 49
 #define DEFAULT_LOWER_REAR_ON_PERCENT 50
 #define DEFAULT_LOWER_REAR_OFF_PERCENT 100
+#endif
+#ifdef CONFIGURATION_LOW_COST
+#define DEFAULT_LOWER_FRONT_ON_PERCENT 0
+#define DEFAULT_LOWER_FRONT_OFF_PERCENT 100
+#endif
 
 Heater upperFrontHeater = {{true, 1200, 1300,  DEFAULT_TRIAC_ON_PERCENT,       DEFAULT_TRIAC_OFF_PERCENT}, 0, 0, relayStateOff, false, 0.0};
-Heater upperRearHeater  = {{true, 1100, 1200,  DEFAULT_TRIAC_ON_PERCENT,       DEFAULT_TRIAC_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
 Heater lowerFrontHeater = {{true,  600,  650,  DEFAULT_LOWER_FRONT_ON_PERCENT, DEFAULT_LOWER_FRONT_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
+#ifdef CONFIGURATION_ORIGINAL
+Heater upperRearHeater  = {{true, 1100, 1200,  DEFAULT_TRIAC_ON_PERCENT,       DEFAULT_TRIAC_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
 Heater lowerRearHeater  = {{true,  575,  625,  DEFAULT_LOWER_REAR_ON_PERCENT,  DEFAULT_LOWER_REAR_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
+#endif
 
 // convenience array, could go into flash
+#ifdef CONFIGURATION_ORIGINAL
 Heater *aHeaters[4] =
 {
   &upperFrontHeater,
@@ -134,6 +162,16 @@ Heater *aHeaters[4] =
   &lowerFrontHeater,
   &lowerRearHeater
 };
+#endif
+#ifdef CONFIGURATION_LOW_COST
+Heater *aHeaters[4] =
+{
+  &upperFrontHeater,
+  NULL,
+  &lowerFrontHeater,
+  NULL
+};
+#endif
 
 const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEMP, MAX_LOWER_TEMP};
 
@@ -144,20 +182,24 @@ const uint16_t maxTempSetting[] = {MAX_UPPER_TEMP, MAX_UPPER_TEMP, MAX_LOWER_TEM
 #define PID_UF_KP 1.1
 #define PID_UF_KI 0.00124
 #define PID_UF_KD 0.0
+#ifdef CONFIGURATION_ORIGINAL
 #define PID_UR_KP 1.1
 #define PID_UR_KI 0.00129
 #define PID_UR_KD 0.0
+#endif
 
 PidParameters pidGainsFront_Aggressive = {0.7, 0.019, 0.0};
-PidParameters pidGainsRear_Aggressive = {0.75, 0.02, 0.0};
 PidParameters pidGainsFront_Normal = {5.0, 0.00130, 0.0};
-PidParameters pidGainsRear_Normal = {5.0, 0.00150, 0.0};
 PidIo upperFrontPidIo = {1000, 47, {PID_UF_KP, PID_UF_KI, PID_UF_KD}};
-PidIo upperRearPidIo  = {1000, 47, {PID_UR_KP, PID_UR_KI, PID_UR_KD}};
 PID upperFrontPID(&upperFrontHeater.thermocouple, &upperFrontPidIo.Output, &upperFrontPidIo.Setpoint,
                   upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd, DIRECT);
+#ifdef CONFIGURATION_ORIGINAL
+PidParameters pidGainsRear_Aggressive = {0.75, 0.02, 0.0};
+PidParameters pidGainsRear_Normal = {5.0, 0.00150, 0.0};
+PidIo upperRearPidIo  = {1000, 47, {PID_UR_KP, PID_UR_KI, PID_UR_KD}};
 PID upperRearPID(&upperRearHeater.thermocouple, &upperRearPidIo.Output, &upperRearPidIo.Setpoint,
                  upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd, DIRECT);
+#endif
 #endif
 
 volatile bool outputTempPeriodic = false;
@@ -234,37 +276,45 @@ void readThermocouples(void)
   oldTime = newTime;
 
   upperFrontTcReading = readAD8495KTC(ANALOG_THERMO_UPPER_FRONT);
-  upperRearTcReading = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
   lowerFrontTcReading = readAD8495KTC(ANALOG_THERMO_LOWER_FRONT);
+  #ifdef CONFIGURATION_ORIGINAL
+  upperRearTcReading = readAD8495KTC(ANALOG_THERMO_UPPER_REAR);
   lowerRearTcReading = readAD8495KTC(ANALOG_THERMO_LOWER_REAR);
+  #endif
 
   if (!filtersInitialized)
   {
     if (newTime < 1000) return;
     upperFrontHeater.thermocouple = upperFrontTcReading;
-    upperRearHeater.thermocouple = upperRearTcReading;
     lowerFrontHeater.thermocouple = lowerFrontTcReading;
-    lowerRearHeater.thermocouple = lowerRearTcReading;
     upperFrontHeater.tcFilter.initialize(upperFrontHeater.thermocouple);
-    upperRearHeater.tcFilter.initialize(upperRearHeater.thermocouple);
     lowerFrontHeater.tcFilter.initialize(lowerFrontHeater.thermocouple);
+    #ifdef CONFIGURATION_ORIGINAL
+    upperRearHeater.thermocouple = upperRearTcReading;
+    lowerRearHeater.thermocouple = lowerRearTcReading;
+    upperRearHeater.tcFilter.initialize(upperRearHeater.thermocouple);
     lowerRearHeater.tcFilter.initialize(lowerRearHeater.thermocouple);
+    #endif
     filtersInitialized = true;
   }
 
   upperFrontHeater.thermocouple = upperFrontHeater.tcFilter.step(
     slewRateLimit(upperFrontTcReading, upperFrontHeater.thermocouple, 250.0)); // 57.0
-  upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
-    slewRateLimit(upperRearTcReading, upperRearHeater.thermocouple, 250.0));
   lowerFrontHeater.thermocouple = lowerFrontHeater.tcFilter.step(
     slewRateLimit(lowerFrontTcReading, lowerFrontHeater.thermocouple, 250.0)); // 4.4
+  #ifdef CONFIGURATION_ORIGINAL
+  upperRearHeater.thermocouple = upperRearHeater.tcFilter.step(
+    slewRateLimit(upperRearTcReading, upperRearHeater.thermocouple, 250.0));
   lowerRearHeater.thermocouple = lowerRearHeater.tcFilter.step(
     slewRateLimit(lowerRearTcReading, lowerRearHeater.thermocouple, 250.0));
+  #endif
 
   ufTcLimit.checkLimit(upperFrontHeater.thermocouple);
-  urTcLimit.checkLimit(upperRearHeater.thermocouple);
   lfTcLimit.checkLimit(lowerFrontHeater.thermocouple);
+  #ifdef CONFIGURATION_ORIGINAL
+  urTcLimit.checkLimit(upperRearHeater.thermocouple);
   lrTcLimit.checkLimit(lowerRearHeater.thermocouple);
+  #endif
 
   if (ufTcLimit.limitExceeded())
   {
@@ -275,6 +325,7 @@ void readThermocouples(void)
       needSave = true;
     }
   }
+  #ifdef CONFIGURATION_ORIGINAL
   if (urTcLimit.limitExceeded())
   {
     if (urTcTempLimitFailed == false)
@@ -284,6 +335,7 @@ void readThermocouples(void)
       needSave = true;
     }
   }
+  #endif
   if (lfTcLimit.limitExceeded())
   {
     if (lfTcTempLimitFailed == false)
@@ -293,6 +345,7 @@ void readThermocouples(void)
       needSave = true;
     }
   }
+  #ifdef CONFIGURATION_ORIGINAL
   if (lrTcLimit.limitExceeded())
   {
     if (lrTcTempLimitFailed == false)
@@ -302,12 +355,15 @@ void readThermocouples(void)
       needSave = true;
     }
   }
+  #endif
+
   if (needSave)
   {
     saveParametersToMemory(); 
   }
 
   // Check differentials
+  #ifdef CONFIGURATION_ORIGINAL
   if (upperTempDiffExceeded == false)
   {
     if(fabs(fabs(upperFrontHeater.thermocouple - upperRearHeater.thermocouple) - fabs(upperFrontPidIo.Setpoint - upperRearPidIo.Setpoint)) > 500)
@@ -341,6 +397,7 @@ void readThermocouples(void)
       lowerTempDiffExceededCount = 0;
     }
   }
+  #endif
 }
 
 //------------------------------------------
@@ -352,22 +409,26 @@ void ConvertHeaterPercentCounts(void)
   upperFrontHeater.heaterCountsOn  = (((uint32_t)upperFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
   upperFrontHeater.heaterCountsOff = (((uint32_t)upperFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
 
-  upperRearHeater.heaterCountsOn   = (((uint32_t)upperRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-  upperRearHeater.heaterCountsOff  = (((uint32_t)upperRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
-
   lowerFrontHeater.heaterCountsOn  = (((uint32_t)lowerFrontHeater.parameter.onPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
   lowerFrontHeater.heaterCountsOff = (((uint32_t)lowerFrontHeater.parameter.offPercent * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
 
+  #ifdef CONFIGURATION_ORIGINAL
+  upperRearHeater.heaterCountsOn   = (((uint32_t)upperRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  upperRearHeater.heaterCountsOff  = (((uint32_t)upperRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+
   lowerRearHeater.heaterCountsOn   = (((uint32_t)lowerRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
   lowerRearHeater.heaterCountsOff  = (((uint32_t)lowerRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
+  #endif
 }
 
 void UpdateHeaterHardware(void)
 {
   changeRelayState(HEATER_TRIAC_UPPER_FRONT, upperFrontHeater.relayState);
-  changeRelayState(HEATER_TRIAC_UPPER_REAR, upperRearHeater.relayState);
   changeRelayState(HEATER_RELAY_LOWER_FRONT, lowerFrontHeater.relayState);
+  #ifdef CONFIGURATION_ORIGINAL
+  changeRelayState(HEATER_TRIAC_UPPER_REAR, upperRearHeater.relayState);
   changeRelayState(HEATER_RELAY_LOWER_REAR, lowerRearHeater.relayState);
+  #endif
 }
 
 void AllHeatersOffStateClear(void)
@@ -376,6 +437,7 @@ void AllHeatersOffStateClear(void)
 
 	for (i=0; i<4; i++)
 	{
+    if (aHeaters[i] == NULL) continue;
 		aHeaters[i]->relayState = relayStateOff;
 		aHeaters[i]->heaterCoolDownState = false;
 	}
@@ -383,7 +445,9 @@ void AllHeatersOffStateClear(void)
   UpdateHeaterHardware();
 
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOff);
+  #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOff);
+  #endif
 }
 
 void outputAcInputStates(void)
@@ -432,31 +496,36 @@ void outputDomeState(void)
 
 void outputTemps(void)
 {
-  uint16_t intTempCUF, intTempCUR, intTempCLF, intTempCLR;
   // 0000000000111111111122222222223
   // 0123456789012345678901234567890
   // Temps 1111 2222 3333 4444
   uint8_t msg[30];
   uint8_t buf[7];
 
-  intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
-  intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
-  intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
-  intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
+  uint16_t intTempCUF =  (uint16_t) (upperFrontHeater.thermocouple + 0.5);
+  uint16_t intTempCLF =  (uint16_t) (lowerFrontHeater.thermocouple + 0.5);
+  #ifdef CONFIGURATION_ORIGINAL
+  uint16_t intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
+  uint16_t intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
+  #endif
   
   msg[0] = 0;
   strcat((char *)&msg[0], "Temps ");
   itoa(intTempCUF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
+  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCUR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
+  #endif
   itoa(intTempCLF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
+  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCLR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
+  #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
@@ -469,24 +538,30 @@ void outputRawTemps(void)
   uint8_t msg[30];
   uint8_t buf[7];
 
-  intTempCUF =  (uint16_t) (upperFrontTcReading + 0.5);
-  intTempCUR =  (uint16_t) (upperRearTcReading  + 0.5);
-  intTempCLF =  (uint16_t) (lowerFrontTcReading + 0.5);
-  intTempCLR =  (uint16_t) (lowerRearTcReading  + 0.5);
+  uint16_t intTempCUF =  (uint16_t) (upperFrontTcReading + 0.5);
+  uint16_t intTempCLF =  (uint16_t) (lowerFrontTcReading + 0.5);
+  #ifdef CONFIGURATION_ORIGINAL
+  uint16_t intTempCUR =  (uint16_t) (upperRearTcReading  + 0.5);
+  uint16_t intTempCLR =  (uint16_t) (lowerRearTcReading  + 0.5);
+  #endif
   
   msg[0] = 0;
   strcat((char *)&msg[0], "RawTemps ");
   itoa(intTempCUF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
+  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCUR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
+  #endif
   itoa(intTempCLF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
+  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCLR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
+  #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 void outputCookingState(void)
@@ -536,8 +611,10 @@ void outputFailures(void)
 {
   //                                                       0000000000111111111122222222223
   //                                                       0123456789012345678901234567890
+  #ifdef CONFIGURATION_ORIGINAL
   static const uint8_t msgUpperDiffExceeded[]   PROGMEM = "FAIL: upper_diff_exceeded";
   static const uint8_t msgLowerDiffExceeded[]   PROGMEM = "FAIL: lower_diff_exceeded";
+  #endif
   static const uint8_t msgWatchdogReset[]       PROGMEM = "WARN: watchdog_reset";
   static const uint8_t msgTcoFailure[]          PROGMEM = "FAIL: tco_failure";
   static const uint8_t msgCoolingFanFailure[]   PROGMEM = "FAIL: cooling_fan";
@@ -587,16 +664,20 @@ void outputFailures(void)
     serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
 
+  #ifdef CONFIGURATION_ORIGINAL
   if (upperTempDiffExceeded)
   {
     strcpy_P((char *)&msg[0], (char *)&msgUpperDiffExceeded[0]);
     serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
+
   if (lowerTempDiffExceeded)
   {
     strcpy_P((char *)&msg[0], (char *)&msgLowerDiffExceeded[0]);
     serialCommWrapperSendMessage(msg, strlen((char *)&msg[0]));  
   }  
+  #endif
+
   if (doorInput.IsActive())
   {
     strcpy_P((char *)&msg[0], (const char *)&msgDoorDropped[0]);
@@ -612,9 +693,19 @@ void outputRelayStates(void)
   uint8_t msg[18];
   strcpy_P((char *)&msg[0], (const char *)&msgTemplate[0]);
   msg[7] = '0' + digitalRead(HEATER_TRIAC_UPPER_FRONT);
+  #ifdef CONFIGURATION_ORIGINAL
   msg[9] = '0' + digitalRead(HEATER_TRIAC_UPPER_REAR);
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  msg[9] = '0';
+  #endif
   msg[11] = '0' + digitalRead(HEATER_RELAY_LOWER_FRONT);
+  #ifdef CONFIGURATION_ORIGINAL
   msg[13] = '0' + digitalRead(HEATER_RELAY_LOWER_REAR);
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  msg[13] = '0';
+  #endif
   
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
@@ -628,7 +719,12 @@ void outputPidDutyCycles(void)
   strcpy((char *)&msg[0], "PidDC ");
   ftoa(upperFrontPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
   strcat((char *)&msg[0], " ");
+  #ifdef CONFIGURATION_ORIGINAL
   ftoa(upperRearPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  strcat((char *)&msg[0], "0.0");
+  #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
@@ -645,8 +741,13 @@ void outputTimeInfo(void)
   ultoa(relayTimeBase, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], ", thresh: ");
+  #ifdef CONFIGURATION_ORIGINAL
   ultoa(lowerRearHeater.heaterCountsOn, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (const char *)&buf[0]);
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  strcat((char *)&msg[0], "100");
+  #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
@@ -808,51 +909,65 @@ void HeaterTimerInterrupt()
 void saveParametersToMemory(void)
 {
   pizzaMemoryWrite((uint8_t*)&upperFrontHeater.parameter, offsetof(MemoryStore, upperFrontHeaterParameters), sizeof(HeaterParameters));
-  pizzaMemoryWrite((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryWrite((uint8_t*)&lowerFrontHeater.parameter, offsetof(MemoryStore, lowerFrontHeaterParameters), sizeof(HeaterParameters));
+  #ifdef CONFIGURATION_ORIGINAL
+  pizzaMemoryWrite((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryWrite((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
+  #endif
   pizzaMemoryWrite((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
   pizzaMemoryWrite((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
 #ifdef USE_PID
   pizzaMemoryWrite((uint8_t*)&upperFrontPidIo.pidParameters, offsetof(MemoryStore, upperFrontPidParameters), sizeof(PidParameters));
+  #ifdef CONFIGURATION_ORIGINAL
   pizzaMemoryWrite((uint8_t*)&upperRearPidIo.pidParameters, offsetof(MemoryStore, upperRearPidParameters), sizeof(PidParameters));
+  #endif
 #endif
   pizzaMemoryWrite((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
   pizzaMemoryWrite((uint8_t*)&doorHasDeployed, offsetof(MemoryStore, doorHasDeployed), sizeof(doorHasDeployed));
   pizzaMemoryWrite((uint8_t*)&ufTcLimitExceededCount, offsetof(MemoryStore, ufTcLimitExceededCount), sizeof(ufTcLimitExceededCount));
-  pizzaMemoryWrite((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryWrite((uint8_t*)&lfTcLimitExceededCount, offsetof(MemoryStore, lfTcLimitExceededCount), sizeof(lfTcLimitExceededCount));
+  #ifdef CONFIGURATION_ORIGINAL
+  pizzaMemoryWrite((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryWrite((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
+  #endif
 }
 
 static void readParametersFromMemory(void)
 {
   pizzaMemoryRead((uint8_t*)&upperFrontHeater.parameter, offsetof(MemoryStore, upperFrontHeaterParameters), sizeof(HeaterParameters));
-  pizzaMemoryRead((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryRead((uint8_t*)&lowerFrontHeater.parameter, offsetof(MemoryStore, lowerFrontHeaterParameters), sizeof(HeaterParameters));
+  #ifdef CONFIGURATION_ORIGINAL
+  pizzaMemoryRead((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryRead((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
+  #endif
 
   // restore default percentages on read
   upperFrontHeater.parameter.onPercent = DEFAULT_TRIAC_ON_PERCENT;
   upperFrontHeater.parameter.offPercent = DEFAULT_TRIAC_OFF_PERCENT;
-  upperRearHeater.parameter.onPercent = DEFAULT_TRIAC_ON_PERCENT;
-  upperRearHeater.parameter.offPercent = DEFAULT_TRIAC_OFF_PERCENT;
   lowerFrontHeater.parameter.onPercent = DEFAULT_LOWER_FRONT_ON_PERCENT;
   lowerFrontHeater.parameter.offPercent = DEFAULT_LOWER_FRONT_OFF_PERCENT;
+  #ifdef CONFIGURATION_ORIGINAL
+  upperRearHeater.parameter.onPercent = DEFAULT_TRIAC_ON_PERCENT;
+  upperRearHeater.parameter.offPercent = DEFAULT_TRIAC_OFF_PERCENT;
   lowerRearHeater.parameter.onPercent = DEFAULT_LOWER_REAR_ON_PERCENT;
   lowerRearHeater.parameter.offPercent = DEFAULT_LOWER_REAR_OFF_PERCENT;
+  #endif
 
   pizzaMemoryRead((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
   pizzaMemoryRead((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
 #ifdef USE_PID
   pizzaMemoryRead((uint8_t*)&upperFrontPidIo.pidParameters, offsetof(MemoryStore, upperFrontPidParameters), sizeof(PidParameters));
+  #ifdef CONFIGURATION_ORIGINAL
   pizzaMemoryRead((uint8_t*)&upperRearPidIo.pidParameters, offsetof(MemoryStore, upperRearPidParameters), sizeof(PidParameters));
+  #endif
 #endif
   pizzaMemoryRead((uint8_t*)&doorDeployCount, offsetof(MemoryStore, doorDeployCount), sizeof(doorDeployCount));
   pizzaMemoryRead((uint8_t*)&ufTcLimitExceededCount, offsetof(MemoryStore, ufTcLimitExceededCount), sizeof(ufTcLimitExceededCount));
-  pizzaMemoryRead((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryRead((uint8_t*)&lfTcLimitExceededCount, offsetof(MemoryStore, lfTcLimitExceededCount), sizeof(lfTcLimitExceededCount));
+  #ifdef CONFIGURATION_ORIGINAL
+  pizzaMemoryRead((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryRead((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
+  #endif
 }
 
 static void sendSerialByte(uint8_t b)
@@ -869,8 +984,10 @@ void setup()
   cli(); 
   wdt_reset();
 
+  #ifdef CONFIGURATION_ORIGINAL
   upperTempDiffExceededCount = 0;
   lowerTempDiffExceededCount = 0;
+  #endif
 
   /* Clear all flags in MCUSR */
   MCUSR &= ~((1<<WDRF) | (1<<BORF) | (1<<EXTRF) | (1<<PORF) );
@@ -886,17 +1003,24 @@ void setup()
     COOLING_FAN_RELAY,
     COOLING_FAN_LOW_SPEED,
     HEATER_TRIAC_UPPER_FRONT,
-    HEATER_TRIAC_UPPER_REAR,
     HEATER_RELAY_LOWER_FRONT,
-    HEATER_RELAY_LOWER_REAR,
     HEATER_UPPER_FRONT_DLB,
+    #ifdef CONFIGURATION_ORIGINAL
+    HEATER_TRIAC_UPPER_REAR,
     HEATER_UPPER_REAR_DLB
+    HEATER_RELAY_LOWER_REAR,
+    #endif
+    #ifdef CONFIGURATION_LOW_COST
+    DOOR_LOCK_MOTOR_DRIVE_PIN
+    #endif
   };
   uint8_t adcsToInitialize[] = {
     ANALOG_THERMO_UPPER_FRONT,
-    ANALOG_THERMO_UPPER_REAR,
     ANALOG_THERMO_LOWER_FRONT,
+    #ifdef CONFIGURATION_ORIGINAL
+    ANALOG_THERMO_UPPER_REAR,
     ANALOG_THERMO_LOWER_REAR
+    #endif
   };
 
   // disable the watchdog timer
@@ -973,6 +1097,7 @@ void setup()
   upperFrontPidIo.pidParameters.kd = PID_UF_KD;
   upperFrontPID.SetTunings(upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd);
 
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPID.SetMode(MANUAL);
   upperRearPID.SetOutputLimits(0, MAX_PID_OUTPUT);
   upperRearPID.SetSampleTime(4000);
@@ -980,6 +1105,7 @@ void setup()
   upperRearPidIo.pidParameters.ki = PID_UR_KI;
   upperRearPidIo.pidParameters.kd = PID_UR_KD;
   upperRearPID.SetTunings(upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd);
+  #endif
 #endif
 
   wdt_enable(WDTO_2S);
@@ -1101,7 +1227,12 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 break;
               case '2' :
                 static const char urText[] PROGMEM = "UR ";
+                #ifdef CONFIGURATION_ORIGINAL
                 printHeaterTemperatureParameters(urText, upperRearHeater.parameter.parameterArray);
+                #endif
+                #ifdef CONFIGURATION_LOW_COST
+                printHeaterTemperatureParameters(urText, upperFrontHeater.parameter.parameterArray);
+                #endif
                 break;
               case '3' :
                 static const char lfText[] PROGMEM = "LF ";
@@ -1109,7 +1240,12 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 break;
               case '4' :
                 static const char lrText[] PROGMEM = "LR ";
+                #ifdef CONFIGURATION_ORIGINAL
                 printHeaterTemperatureParameters(lrText, lowerRearHeater.parameter.parameterArray);
+                #endif
+                #ifdef CONFIGURATION_LOW_COST
+                printHeaterTemperatureParameters(lrText, lowerFrontHeater.parameter.parameterArray);
+                #endif
                 break;
               default:
                 Serial.print(F("DEBUG unknown command received for the 'p' command: "));
@@ -1131,6 +1267,12 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
             {
               heaterIndex = (receivedCommandBuffer[1] - '0')-1;
               pHeater = aHeaters[heaterIndex];
+
+              if (pHeater == NULL)
+              {
+                Serial.println(F("DEBUG Ignoring setpoint set for non-existent element."));
+                break;
+              }
               
               GetInputValue(&newSetpoint, &receivedCommandBuffer[2]);
               if (newSetpoint > maxTempSetting[heaterIndex])
@@ -1176,6 +1318,11 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
             if (CharIsADigit(receivedCommandBuffer[1]) && (receivedCommandBuffer[1] > '0') && (receivedCommandBuffer[1] < '5'))
             {
               pHeater = aHeaters[(receivedCommandBuffer[1] - '0')-1];
+              if (pHeater == NULL)
+              {
+                Serial.println(F("DEBUG Ignoring setpoint set for non-existent element."));
+                break;
+              }
               if (receivedCommandBuffer[0] == 'n')
               {
                 GetInputValue(&pHeater->parameter.onPercent, &receivedCommandBuffer[2]);
@@ -1276,7 +1423,12 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 }
                 else if (receivedCommandBuffer[1] == '2')
                 {
+                  #ifdef CONFIGURATION_ORIGINAL
                   pPidParams = &upperRearPidIo.pidParameters;
+                  #endif
+                  #ifdef CONFIGURATION_LOW_COST
+                  pPidParams = &upperFrontPidIo.pidParameters;
+                  #endif
                 }
                 else
                 {
@@ -1303,7 +1455,9 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                   }
                   saveParametersToMemory();
                   upperFrontPID.SetTunings(upperFrontPidIo.pidParameters.kp, upperFrontPidIo.pidParameters.ki, upperFrontPidIo.pidParameters.kd);
+                  #ifdef CONFIGURATION_ORIGINAL
                   upperRearPID.SetTunings(upperRearPidIo.pidParameters.kp, upperRearPidIo.pidParameters.ki, upperRearPidIo.pidParameters.kd);
+                  #endif
                 }
                 else
                 {
@@ -1337,7 +1491,12 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 break;
               case '2' :
                 pText = urgText;
+                #ifdef CONFIGURATION_ORIGINAL
                 pPid = &upperRearPID;
+                #endif
+                #ifdef CONFIGURATION_LOW_COST
+                pPid = &upperFrontPID;
+                #endif
                 break;
               default:
                 Serial.print(F("DEBUG unknown command received for the 'G' command: "));
@@ -1429,7 +1588,6 @@ void loop()
   }
 
   handleRelayWatchdog();
-//poStateMachine.update();
   updateCookingStateMachine();
 
   boostEnable(relayBoostRun);
@@ -1445,7 +1603,9 @@ void loop()
   #define PID_GAIN_SHIFT_TEMP_DIFF 25.0
   handleRelayWatchdog();
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
+  #endif
 
   // set gains
   if ((fabs(upperFrontPidIo.Setpoint - upperFrontHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) && (getCookingState() == cookingPreheat)) {
@@ -1456,6 +1616,7 @@ void loop()
     upperFrontPID.SetTunings(pidGainsFront_Aggressive.kp, pidGainsFront_Aggressive.ki, pidGainsFront_Aggressive.kd);
   }
 
+  #ifdef CONFIGURATION_ORIGINAL
   if ((fabs(upperRearPidIo.Setpoint - upperRearHeater.thermocouple) > PID_GAIN_SHIFT_TEMP_DIFF) && (getCookingState() == cookingPreheat)) {
     // use normal gains
     upperRearPID.SetTunings(pidGainsRear_Normal.kp, pidGainsRear_Normal.ki, pidGainsRear_Normal.kd);
@@ -1463,15 +1624,20 @@ void loop()
     // use aggressive gains
     upperRearPID.SetTunings(pidGainsRear_Aggressive.kp, pidGainsRear_Aggressive.ki, pidGainsRear_Aggressive.kd);
   }
+  #endif
 
   handleRelayWatchdog();
   upperFrontPID.Compute();
   handleRelayWatchdog();
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearPID.Compute();
   handleRelayWatchdog();
+  #endif
   ConvertHeaterPercentCounts();
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+  #ifdef CONFIGURATION_ORIGINAL
   upperRearHeater.heaterCountsOn  = (uint16_t)(((uint32_t)(((100.0 - upperRearPidIo.Output) * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
+  #endif
 
 #endif
 }
