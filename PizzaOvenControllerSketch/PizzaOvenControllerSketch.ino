@@ -47,6 +47,7 @@
 #include "tcLimitCheck.h"
 #include "globals.h"
 #include "serialCommWrapper.h"
+#include "doorLatchMotor.h"
 
 static TcoAndFan tcoAndFan;
 static TcLimitCheck ufTcLimit(1400, 30000);
@@ -67,14 +68,14 @@ static TcLimitCheck lrTcLimit(1000, 5000);
 #define FIRMWARE_MAJOR_VERSION   1
 #define FIRMWARE_MINOR_VERSION   3
 #define FIRMWARE_BUILD_VERSION   3
+const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 #endif
 #ifdef CONFIGURATION_LOW_COST
-#define FIRMWARE_MAJOR_VERSION   20
-#define FIRMWARE_MINOR_VERSION   0
-#define FIRMWARE_BUILD_VERSION   0
+#define FIRMWARE_MAJOR_VERSION   "20"
+#define FIRMWARE_MINOR_VERSION   "0"
+#define FIRMWARE_BUILD_VERSION   "0"
+const char versionString[] = "V " FIRMWARE_MAJOR_VERSION "." FIRMWARE_MINOR_VERSION " bugfix " FIRMWARE_BUILD_VERSION;
 #endif
-
-const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' + FIRMWARE_MINOR_VERSION, ' ', 'b', 'u', 'g', 'f', 'i', 'x', ' ', '0' + FIRMWARE_BUILD_VERSION, 0};
 
 //------------------------------------------
 // Macros for Constants and Pin Definitions
@@ -103,9 +104,6 @@ uint16_t relayPeriodSeconds = 60;
 uint16_t doorDeployCount = 0;
 bool doorHasDeployed = false;
 DigitalInputDebounced doorInput(DOOR_STATUS_INPUT, false, true);
-#ifdef CONFIGURATION_LOW_COST
-DigitalInputDebounced lockMotorHomeInput(DOOR_LOCK_MOTOR_HOME_PIN, false, false);
-#endif
 
 
 bool ufTcTempLimitFailed = false;
@@ -466,8 +464,6 @@ void outputAcInputStates(void)
 
 void outputDoorStatus(void)
 {
-  //                                            0000000000111111111122222222223
-  //                                            0123456789012345678901234567890
   static const uint8_t msgTemplate[] PROGMEM = "Door 7 Count 65535";
   uint8_t msg[22];
   strcpy_P((char *)&msg[0], (char *)&msgTemplate[0]);
@@ -478,8 +474,6 @@ void outputDoorStatus(void)
 
 void outputDomeState(void)
 {
-  //                                           0000000000111111111122222222223
-  //                                           0123456789012345678901234567890
   static const uint8_t msgDomeOn[]  PROGMEM = "Dome On";
   static const uint8_t msgDomeOff[] PROGMEM = "Dome Off";
   uint8_t msg[20];
@@ -490,6 +484,22 @@ void outputDomeState(void)
   else
   {
     strcpy_P((char *)&msg[0], (char *)&msgDomeOff[0]);
+  }
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
+
+void outputDoorLatchStateState(void)
+{
+  static const uint8_t msgDoorLatch0[] PROGMEM = "DoorLatch 0";
+  static const uint8_t msgDoorLatch1[] PROGMEM = "DoorLatch 1";
+  uint8_t msg[20];
+  if(latchMotorHomeInput.IsActive())
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgDoorLatch0[0]);
+  }
+  else
+  {
+    strcpy_P((char *)&msg[0], (char *)&msgDoorLatch1[0]);
   }
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
@@ -508,24 +518,24 @@ void outputTemps(void)
   uint16_t intTempCUR =  (uint16_t) (upperRearHeater.thermocouple  + 0.5);
   uint16_t intTempCLR =  (uint16_t) (lowerRearHeater.thermocouple  + 0.5);
   #endif
+  #ifdef CONFIGURATION_LOW_COST
+  uint16_t intTempCUR =  intTempCUF;
+  uint16_t intTempCLR =  intTempCLF;
+  #endif
   
   msg[0] = 0;
   strcat((char *)&msg[0], "Temps ");
   itoa(intTempCUF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
-  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCUR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
-  #endif
   itoa(intTempCLF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
-  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCLR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
-  #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
@@ -543,24 +553,24 @@ void outputRawTemps(void)
   uint16_t intTempCUR =  (uint16_t) (upperRearTcReading  + 0.5);
   uint16_t intTempCLR =  (uint16_t) (lowerRearTcReading  + 0.5);
   #endif
+  #ifdef CONFIGURATION_LOW_COST
+  uint16_t intTempCUR =  intTempCUF;
+  uint16_t intTempCLR =  intTempCLF;
+  #endif
   
   msg[0] = 0;
   strcat((char *)&msg[0], "RawTemps ");
   itoa(intTempCUF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
-  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCUR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
-  #endif
   itoa(intTempCLF, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
   strcat((char *)&msg[0], " ");
-  #ifdef CONFIGURATION_ORIGINAL
   itoa(intTempCLR, (char *)&buf[0], 10);
   strcat((char *)&msg[0], (char *)&buf[0]);
-  #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 void outputCookingState(void)
@@ -703,7 +713,7 @@ void outputRelayStates(void)
   msg[13] = '0' + digitalRead(HEATER_RELAY_LOWER_REAR);
   #endif
   #ifdef CONFIGURATION_LOW_COST
-  msg[13] = '0';
+  msg[13] = '0' + digitalRead(DOOR_LATCH_MOTOR_DRIVE_PIN);
   #endif
   
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
@@ -787,6 +797,7 @@ void PeriodicOutputInfo()
       break;
     case 2:
       outputDomeState();
+      outputDoorLatchStateState();
       printPhase++;
       break;
     
@@ -1010,7 +1021,7 @@ void setup()
     HEATER_RELAY_LOWER_REAR,
     #endif
     #ifdef CONFIGURATION_LOW_COST
-    DOOR_LOCK_MOTOR_DRIVE_PIN
+    DOOR_LATCH_MOTOR_DRIVE_PIN
     #endif
   };
   uint8_t adcsToInitialize[] = {
@@ -1107,6 +1118,8 @@ void setup()
   #endif
 #endif
 
+  LatchMotorPosition_Init();
+
   wdt_enable(WDTO_2S);
 
   Serial.println(F("DEBUG Initialization complete."));
@@ -1131,7 +1144,7 @@ void setup()
    t - set time base
    v - get firmware version
    u - set upper temp limit
-
+   L - toggle door lock motor
 */
 static void handleIncomingMessage(uint8_t *pData, uint8_t length)
 {
@@ -1519,6 +1532,14 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
           receivedCommandBufferIndex = 0;
           break;
 
+        #ifdef CONFIGURATION_LOW_COST
+        case 'L':  // Toggle lock motor
+          Serial.println(F("DEBUG Toggle lock motor requested."));
+          LatchMotorPosition_Toggle();
+          receivedCommandBufferIndex = 0;
+          break;
+        #endif
+
         default:
           Serial.print(F("DEBUG unknown command received: "));
           Serial.println(receivedCommandBuffer[0]);
@@ -1544,6 +1565,7 @@ void updateDcInputs(void)
     oldMillis = newMillis;
 
     doorInput.UpdateInput();
+    latchMotorHomeInput.UpdateInput();
   }
 }
 
@@ -1593,6 +1615,8 @@ void loop()
   relayDriverRun();
 
   handleRelayWatchdog();
+
+  LatchMotorPosition_Run();
 
   PeriodicOutputInfo();
 

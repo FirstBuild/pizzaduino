@@ -54,8 +54,8 @@
 #define DOOR_STATUS_INPUT          (13)
 #define TCO_AC_INPUT               (A5) //AC Input for the TCO, also port PC5
 #ifdef CONFIGURATION_LOW_COST
-#define DOOR_LOCK_MOTOR_HOME_PIN   (A4)
-#define DOOR_LOCK_MOTOR_DRIVE_PIN  (11)
+#define DOOR_LATCH_MOTOR_HOME_PIN   (A4)
+#define DOOR_LATCH_MOTOR_DRIVE_PIN  (11)
 #endif
 
 // Temperature inputs
