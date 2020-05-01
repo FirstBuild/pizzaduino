@@ -34,7 +34,7 @@
 #ifdef CONFIGURATION_LOW_COST
 
 static LatchMotorState latchMotorState;
-DigitalInputDebounced latchMotorHomeInput(DOOR_LATCH_MOTOR_HOME_PIN, false, false);
+DigitalInputDebounced doorLatchLockedInput(DOOR_LATCH_MOTOR_HOME_PIN, false, true);
 
 void LatchMotorPosition_Init() {
     latchMotorState = LatchMotorIdle;
@@ -48,14 +48,14 @@ void LatchMotorPosition_Run() {
 
         case LatchMotorLocking:
             changeRelayState(DOOR_LATCH_MOTOR_DRIVE_PIN, relayStateOn);
-            if (!latchMotorHomeInput.IsActive()) {
+            if (doorLatchLockedInput.IsActive()) {
                 latchMotorState = LatchMotorIdle;
             }
             break;
 
-        case LatchMotorOpening:
+        case LatchMotorUnlocking:
             changeRelayState(DOOR_LATCH_MOTOR_DRIVE_PIN, relayStateOn);
-            if (latchMotorHomeInput.IsActive()) {
+            if (!doorLatchLockedInput.IsActive()) {
                 latchMotorState = LatchMotorIdle;
             }
             break;
@@ -65,10 +65,10 @@ void LatchMotorPosition_Run() {
 void LatchMotorPosition_Toggle() {
     // only change if we are idle
     if (LatchMotorIdle == latchMotorState) {
-        if (latchMotorHomeInput.IsActive()) {
-            latchMotorState = LatchMotorLocking;
+        if (doorLatchLockedInput.IsActive()) {
+            latchMotorState = LatchMotorUnlocking;
         } else {
-            latchMotorState = LatchMotorOpening;
+            latchMotorState = LatchMotorLocking;
         }
         LatchMotorPosition_Run();
     }

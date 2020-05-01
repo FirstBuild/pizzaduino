@@ -38,7 +38,7 @@
 typedef enum {
     LatchMotorIdle,
     LatchMotorLocking,
-    LatchMotorOpening
+    LatchMotorUnlocking
 } LatchMotorState;
 
 void LatchMotorPosition_Init();
@@ -46,7 +46,7 @@ void LatchMotorPosition_Run();
 void LatchMotorPosition_Toggle();
 LatchMotorState LatchMotorPosition_GetState();
 
-extern DigitalInputDebounced latchMotorHomeInput;
+extern DigitalInputDebounced doorLatchLockedInput;
 
 #endif // CONFIGURATION_LOW_COST
 

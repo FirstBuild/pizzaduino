@@ -488,18 +488,18 @@ void outputDomeState(void)
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
-void outputDoorLatchStateState(void)
+void outputDoorLatchState(void)
 {
-  static const uint8_t msgDoorLatch0[] PROGMEM = "DoorLatch 0";
-  static const uint8_t msgDoorLatch1[] PROGMEM = "DoorLatch 1";
+  static const uint8_t msgLatchUnlocked[] PROGMEM = "DoorLatch 0";
+  static const uint8_t msgLatchLocked[] PROGMEM = "DoorLatch 1";
   uint8_t msg[20];
-  if(latchMotorHomeInput.IsActive())
+  if(doorLatchLockedInput.IsActive())
   {
-    strcpy_P((char *)&msg[0], (char *)&msgDoorLatch0[0]);
+    strcpy_P((char *)&msg[0], (char *)&msgLatchLocked[0]);
   }
   else
   {
-    strcpy_P((char *)&msg[0], (char *)&msgDoorLatch1[0]);
+    strcpy_P((char *)&msg[0], (char *)&msgLatchUnlocked[0]);
   }
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
@@ -797,7 +797,7 @@ void PeriodicOutputInfo()
       break;
     case 2:
       outputDomeState();
-      outputDoorLatchStateState();
+      outputDoorLatchState();
       printPhase++;
       break;
     
@@ -1565,7 +1565,7 @@ void updateDcInputs(void)
     oldMillis = newMillis;
 
     doorInput.UpdateInput();
-    latchMotorHomeInput.UpdateInput();
+    doorLatchLockedInput.UpdateInput();
   }
 }
 
