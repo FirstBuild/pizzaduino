@@ -43,6 +43,8 @@ typedef struct MemoryStore
   uint16_t urTcLimitExceededCount;
   uint16_t lfTcLimitExceededCount;
   uint16_t lrTcLimitExceededCount;
+  uint8_t preheatFanSpeed;
+  uint8_t cookingFanSpeed;
 } MemoryStore;
 
 enum pizzaMemoryReturnTypes

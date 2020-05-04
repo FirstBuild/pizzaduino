@@ -117,6 +117,9 @@ bool lrTcTempLimitFailed = false;
 uint16_t lrTcLimitExceededCount = 0;
 #endif
 
+uint8_t preheatFanSpeed = coolingFanLow;
+uint8_t cookingFanSpeed = coolingFanHigh;
+
 #ifdef CONFIGURATION_ORIGINAL
 bool upperTempDiffExceeded = false;
 uint8_t upperTempDiffExceededCount = 0;
@@ -940,6 +943,8 @@ void saveParametersToMemory(void)
   pizzaMemoryWrite((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryWrite((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
   #endif
+  pizzaMemoryWrite((uint8_t*)&preheatFanSpeed, offsetof(MemoryStore, preheatFanSpeed), sizeof(preheatFanSpeed));
+  pizzaMemoryWrite((uint8_t*)&cookingFanSpeed, offsetof(MemoryStore, cookingFanSpeed), sizeof(cookingFanSpeed));
 }
 
 static void readParametersFromMemory(void)
@@ -978,6 +983,8 @@ static void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryRead((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
   #endif
+  pizzaMemoryRead((uint8_t*)&preheatFanSpeed, offsetof(MemoryStore, preheatFanSpeed), sizeof(preheatFanSpeed));
+  pizzaMemoryRead((uint8_t*)&cookingFanSpeed, offsetof(MemoryStore, cookingFanSpeed), sizeof(cookingFanSpeed));
 }
 
 static void sendSerialByte(uint8_t b)
