@@ -48,14 +48,14 @@
 #define RELAY_WATCHDOG             ( 6) //Signal must toggle at a rate of X Hz in order to enable relays
 
 // Digital inputs
-#define VOLTAGE_DETECT             ( 5) //Used to determine supply voltage as 208VAC or 240VAC
-#define POWER_SWITCH_AC_INPUT      ( 3) //AC Input that indicates the state of the power switch
-#define DLB_STATUS_AC_INPUT        ( 4) //AC Input that indicates the status of the L2 panel mount DLB relays
-#define DOOR_STATUS_INPUT          (13)
-#define TCO_AC_INPUT               (A5) //AC Input for the TCO, also port PC5
+#define VOLTAGE_DETECT             ( 5) // PD5 Used to determine supply voltage as 208VAC or 240VAC
+#define DLB_STATUS_AC_INPUT        ( 3) // PD3 AC Input 2 (J501-2) that indicates the status of the L2 panel mount DLB relays
+#define POWER_SWITCH_AC_INPUT      ( 4) // PD4 AC Input 1 (J501-1) that indicates the state of the power switch
+#define DOOR_STATUS_INPUT          (13) // PB5
+#define TCO_AC_INPUT               (A5) // PC5 AC Input 3 (J501-3) for the TCO, also port PC5
 #ifdef CONFIGURATION_LOW_COST
-#define DOOR_LATCH_MOTOR_HOME_PIN   (A4)
-#define DOOR_LATCH_MOTOR_DRIVE_PIN  (11)
+#define DOOR_LATCH_MOTOR_HOME_PIN   (A4) // PC4
+#define DOOR_LATCH_MOTOR_DRIVE_PIN  (11) // PB3
 #endif
 
 // Temperature inputs
