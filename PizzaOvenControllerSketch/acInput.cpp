@@ -34,9 +34,9 @@
 
 /*
  * Pin definitions
- * AC Input 1 - PD4 - Arduino pin D4
- * AC Input 2 - PD3 - Arduino pin D3
- * AC Input 3 - PC5 - Arduino pin A5
+ * AC Input 1 - PD4 - Arduino pin D4 - Power button input
+ * AC Input 2 - PD3 - Arduino pin D3 - Sail switch input
+ * AC Input 3 - PC5 - Arduino pin A5 - TCO Input
  * AC voltage detect input - PD5/OC0B/T1 - Arduino pin D5
  */
 
@@ -46,10 +46,10 @@
 #include <avr/interrupt.h>
 
 #define AC_POWER_PIN (PIND & (1<<PD5))
-#define AC_INPUT_1_PIN (PIND & (1<<PD4))
+#define POWER_BUTTON_PIN (PIND & (1<<PD4))
 
 static volatile uint8_t acPowerPinLastValue = AC_POWER_PIN;
-static volatile uint8_t acInput1PinLastValue = AC_INPUT_1_PIN;
+static volatile uint8_t powerButtonPinLastValue = POWER_BUTTON_PIN;
 
 static uint32_t oldTime = 0;
 static bool powerButtonState = false;
@@ -70,10 +70,10 @@ static void pciSetup(byte pin)
 
 ISR (PCINT2_vect)
 {
-  if(acInput1PinLastValue != AC_INPUT_1_PIN)
+  if(powerButtonPinLastValue != POWER_BUTTON_PIN)
   {
     powerButtonCount++;
-    acInput1PinLastValue = AC_INPUT_1_PIN;
+    powerButtonPinLastValue = POWER_BUTTON_PIN;
   }
   if(acPowerPinLastValue != AC_POWER_PIN)
   {
