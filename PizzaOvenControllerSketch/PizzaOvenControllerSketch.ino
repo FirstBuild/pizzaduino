@@ -118,7 +118,7 @@ uint16_t lrTcLimitExceededCount = 0;
 #endif
 
 uint8_t preheatFanSetting = coolingFanLow;
-uint8_t cookingFanSetting = coolingFanHigh;
+uint8_t cookingFanSetting = coolingFanLow;
 
 #ifdef CONFIGURATION_ORIGINAL
 bool upperTempDiffExceeded = false;
@@ -840,6 +840,7 @@ void PeriodicOutputInfo()
       printPhase++;
       break;
     case 6:
+      #ifdef CONFIGURATION_ORIGINAL
       Serial.print(F("DEBUG, "));
       Serial.print(millis());
       Serial.print(F(", "));
@@ -849,9 +850,11 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       Serial.print(upperRearPID.GetKd(), 7);
       Serial.print(F(", "));
+      #endif
       printPhase++;
       break;
     case 7:
+      #ifdef CONFIGURATION_ORIGINAL
       Serial.print(readAD8495KTC(ANALOG_THERMO_UPPER_REAR));
       Serial.print(F(", "));
       Serial.print(upperRearHeater.thermocouple);
@@ -860,9 +863,11 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       Serial.print(upperRearPidIo.Setpoint);
       Serial.print(F(", "));
+      #endif
       printPhase++;
       break;
     case 8:
+      #ifdef CONFIGURATION_ORIGINAL
       upperRearPID.GetTerms(&pTerm, &iTerm, &dTerm);
       Serial.print(pTerm, 6);
       Serial.print(F(", "));
@@ -870,6 +875,7 @@ void PeriodicOutputInfo()
       Serial.print(F(", "));
       Serial.print(dTerm, 6);
       Serial.print(F(", "));
+      #endif
       printPhase++;
       break;
     case 9:
