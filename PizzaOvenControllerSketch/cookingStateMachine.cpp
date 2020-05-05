@@ -209,7 +209,7 @@ static void stateStandbyExit()
 static void stateWaitForDlbEnter(void)
 {
   Serial.println(F("DEBUG entering wait for DLB."));
-  CoolingFanControl(coolingFanHigh);
+  CoolingFanControl(preheatFanSetting);
 }
 
 static void stateWaitForDlbUpdate(void)
@@ -502,6 +502,7 @@ static void statePreheatExit()
 static void stateHeatCycleEnter()
 {
   Serial.println(F("DEBUG entering heat cycle"));
+  CoolingFanControl(cookingFanSetting);
 
   // Start the timer1 counter over at the start of heat cycle volatile since used in interrupt
   triacTimeBase = 0;

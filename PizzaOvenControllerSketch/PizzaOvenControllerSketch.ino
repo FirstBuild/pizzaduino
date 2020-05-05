@@ -73,7 +73,7 @@ const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' +
 #ifdef CONFIGURATION_LOW_COST
 #define FIRMWARE_MAJOR_VERSION   "20"
 #define FIRMWARE_MINOR_VERSION   "0"
-#define FIRMWARE_BUILD_VERSION   "0"
+#define FIRMWARE_BUILD_VERSION   "1"
 const char versionString[] = "V " FIRMWARE_MAJOR_VERSION "." FIRMWARE_MINOR_VERSION " bugfix " FIRMWARE_BUILD_VERSION;
 #endif
 
@@ -117,8 +117,8 @@ bool lrTcTempLimitFailed = false;
 uint16_t lrTcLimitExceededCount = 0;
 #endif
 
-uint8_t preheatFanSpeed = coolingFanLow;
-uint8_t cookingFanSpeed = coolingFanHigh;
+uint8_t preheatFanSetting = coolingFanLow;
+uint8_t cookingFanSetting = coolingFanHigh;
 
 #ifdef CONFIGURATION_ORIGINAL
 bool upperTempDiffExceeded = false;
@@ -763,6 +763,27 @@ void outputTimeInfo(void)
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
+/*
+  Fan settings response: FRab
+
+  Where:
+    a = preheat fan speed
+    b = cooking fan speed
+
+  a or b will be the ascii value of the fan speed.
+  The fan speed will be:
+    0 = low fan speed
+    1 = high fan speed
+  
+*/
+void outputFanSettings()
+{
+  uint8_t msg[] = "FR 1 1";
+  msg[3] = preheatFanSetting == coolingFanLow ? '0' : '1';
+  msg[5] = cookingFanSetting == coolingFanLow ? '0' : '1';
+  serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
+}
+
 void PeriodicOutputInfo()
 {
   static uint8_t printPhase = 0;
@@ -801,6 +822,7 @@ void PeriodicOutputInfo()
     case 2:
       outputDomeState();
       outputDoorLatchState();
+      outputFanSettings();
       printPhase++;
       break;
     
@@ -943,8 +965,8 @@ void saveParametersToMemory(void)
   pizzaMemoryWrite((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryWrite((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
   #endif
-  pizzaMemoryWrite((uint8_t*)&preheatFanSpeed, offsetof(MemoryStore, preheatFanSpeed), sizeof(preheatFanSpeed));
-  pizzaMemoryWrite((uint8_t*)&cookingFanSpeed, offsetof(MemoryStore, cookingFanSpeed), sizeof(cookingFanSpeed));
+  pizzaMemoryWrite((uint8_t*)&preheatFanSetting, offsetof(MemoryStore, preheatFanSetting), sizeof(preheatFanSetting));
+  pizzaMemoryWrite((uint8_t*)&cookingFanSetting, offsetof(MemoryStore, cookingFanSetting), sizeof(cookingFanSetting));
 }
 
 static void readParametersFromMemory(void)
@@ -983,8 +1005,8 @@ static void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&urTcLimitExceededCount, offsetof(MemoryStore, urTcLimitExceededCount), sizeof(urTcLimitExceededCount));
   pizzaMemoryRead((uint8_t*)&lrTcLimitExceededCount, offsetof(MemoryStore, lrTcLimitExceededCount), sizeof(lrTcLimitExceededCount));
   #endif
-  pizzaMemoryRead((uint8_t*)&preheatFanSpeed, offsetof(MemoryStore, preheatFanSpeed), sizeof(preheatFanSpeed));
-  pizzaMemoryRead((uint8_t*)&cookingFanSpeed, offsetof(MemoryStore, cookingFanSpeed), sizeof(cookingFanSpeed));
+  pizzaMemoryRead((uint8_t*)&preheatFanSetting, offsetof(MemoryStore, preheatFanSetting), sizeof(preheatFanSetting));
+  pizzaMemoryRead((uint8_t*)&cookingFanSetting, offsetof(MemoryStore, cookingFanSetting), sizeof(cookingFanSetting));
 }
 
 static void sendSerialByte(uint8_t b)
@@ -1152,6 +1174,8 @@ void setup()
    v - get firmware version
    u - set upper temp limit
    L - toggle door lock motor
+   FR - Read fan speed settings for preheat and cooking
+   FW - Write fan speed settings for preheat and cooking
 */
 static void handleIncomingMessage(uint8_t *pData, uint8_t length)
 {
@@ -1546,6 +1570,42 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
           receivedCommandBufferIndex = 0;
           break;
         #endif
+
+        case 'F':
+          if (receivedCommandBufferIndex >= 2)
+          {
+            switch (receivedCommandBuffer[1])
+            {
+              case 'R':
+                Serial.println(F("DEBUG Fan speed settings read requested."));
+                outputFanSettings();
+                receivedCommandBufferIndex = 0;
+                break;
+              case 'W':
+                if (receivedCommandBufferIndex >= 4)
+                {
+                  Serial.println(F("DEBUG Fan speed settings write requested."));
+                  uint8_t newPreheatFanSetting = receivedCommandBuffer[2] - '0' + 1;
+                  uint8_t newCookingFanSetting = receivedCommandBuffer[3] - '0' + 1;
+                  if ((newPreheatFanSetting >= coolingFanLow) 
+                   && (newPreheatFanSetting <= coolingFanHigh)
+                   && (newCookingFanSetting >= coolingFanLow) 
+                   && (newCookingFanSetting <= coolingFanHigh)) 
+                  {
+                    preheatFanSetting = newPreheatFanSetting;
+                    cookingFanSetting = newCookingFanSetting;
+                    saveParametersToMemory();
+                  }
+                  else
+                  {
+                    Serial.println(F("DEBUG Error writing fan speed settings"));
+                  }
+                  receivedCommandBufferIndex = 0;
+                }
+                break;
+            }
+          }
+          break;
 
         default:
           Serial.print(F("DEBUG unknown command received: "));

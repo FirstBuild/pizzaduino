@@ -27,7 +27,7 @@
 //#define ENABLE_PID_TUNING
 
 #define COOL_DOWN_EXIT_TEMP    ((double)425.0)
-#define MAX_UPPER_TEMP (1300)
+#define MAX_UPPER_TEMP (1350)
 #define MAX_LOWER_TEMP (805)
 
 //#define CONFIGURATION_ORIGINAL
