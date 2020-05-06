@@ -208,8 +208,16 @@ static void stateStandbyExit()
 //State stateWaitForDlb = State(stateWaitForDlbEnter, stateWaitForDlbUpdate, stateWaitForDlbExit);
 static void stateWaitForDlbEnter(void)
 {
+  int i;
+
   Serial.println(F("DEBUG entering wait for DLB."));
   CoolingFanControl(preheatFanSetting);
+
+  lowerFrontHeater.calculatedDutyCycle = 100.0;
+  for(i=0; i<sizeof(lowerFrontHeater.event)/sizeof(RelayTimeStamp); i++)
+  {
+    lowerFrontHeater.event[i].state = RELAY_STATE_INVALID;
+  }
 }
 
 static void stateWaitForDlbUpdate(void)

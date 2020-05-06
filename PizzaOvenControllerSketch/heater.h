@@ -41,6 +41,13 @@ struct HeaterParameters
   };
 };
 
+#define RELAY_STATE_INVALID 127
+
+typedef struct RelayTimeStamp {
+  uint32_t time;
+  uint8_t state;
+}
+
 struct Heater
 {
   HeaterParameters parameter;
@@ -50,6 +57,8 @@ struct Heater
   bool heaterCoolDownState;
   double thermocouple;
   FilterBeLp2 tcFilter;
+  RelayTimeStamp event[3];
+  float calculatedDutyCycle;
 };
 
 
