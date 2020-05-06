@@ -73,7 +73,7 @@ const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' +
 #ifdef CONFIGURATION_LOW_COST
 #define FIRMWARE_MAJOR_VERSION   "20"
 #define FIRMWARE_MINOR_VERSION   "0"
-#define FIRMWARE_BUILD_VERSION   "1"
+#define FIRMWARE_BUILD_VERSION   "2"
 const char versionString[] = "V " FIRMWARE_MAJOR_VERSION "." FIRMWARE_MINOR_VERSION " bugfix " FIRMWARE_BUILD_VERSION;
 #endif
 
