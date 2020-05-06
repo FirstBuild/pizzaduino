@@ -829,21 +829,31 @@ void PeriodicOutputInfo()
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
     case 3:
-      Serial.print(F("DEBUG, Time, UR KP, UR KI, UR KD, UR Raw, UR Temp, UR DC, UR Setpoint, UR pTerm, "));
+      #ifdef CONFIGURATION_ORIGINAL
+      Serial.print(F("DEBUG_PID, Time, UR KP, UR KI, UR KD, UR Raw, UR Temp, UR DC, UR Setpoint, UR pTerm, "));
+      #endif
+      #ifdef CONFIGURATION_LOW_COST
+      Serial.print(F("DEBUG_PID, Time, "));
+      #endif
       printPhase++;
       break;
     case 4:
+      #ifdef CONFIGURATION_ORIGINAL
       Serial.println(F("UR iTerm, UR dTerm, UF KP, UF KI, UF KD, UF Raw, UF Temp, UF DC, UF Setpoint, UF pTerm, UF iTerm, UF dTerm"));
+      #endif
+      #ifdef CONFIGURATION_LOW_COST
+      Serial.println(F("UF KP, UF KI, UF KD, UF Raw, UF Temp, UF DC, UF Setpoint, UF pTerm, UF iTerm, UF dTerm"));
+      #endif
       printPhase++;
       break;
     case 5:
       printPhase++;
       break;
     case 6:
-      #ifdef CONFIGURATION_ORIGINAL
-      Serial.print(F("DEBUG, "));
+      Serial.print(F("DEBUG_PID, "));
       Serial.print(millis());
       Serial.print(F(", "));
+      #ifdef CONFIGURATION_ORIGINAL
       Serial.print(upperRearPID.GetKp(), 7);
       Serial.print(F(", "));
       Serial.print(upperRearPID.GetKi(), 7);
