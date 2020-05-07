@@ -22,6 +22,12 @@
 
 #include "heater.h"
 
+static void UpdateDutyCycle(Heater *pHeater)
+{
+  
+
+}
+
 void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
 {
   double temperature;
@@ -41,6 +47,7 @@ void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
       {
         pHeater->heaterCoolDownState = true;
         pHeater->relayState = relayStateOff;
+        UpdateDutyCycle(pHeater);
       }
     }
     // If in cool down and less than equal than low set point, exit cool down and turn heater on
@@ -51,6 +58,7 @@ void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)
       {
         pHeater->heaterCoolDownState = false;
         pHeater->relayState = relayStateOn;
+        UpdateDutyCycle(pHeater);
       }
     }
   }
