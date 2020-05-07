@@ -50,7 +50,7 @@
 #include "doorLatchMotor.h"
 
 static TcoAndFan tcoAndFan;
-static TcLimitCheck ufTcLimit(1400, 30000);
+static TcLimitCheck ufTcLimit(1600, 30000);
 static TcLimitCheck lfTcLimit(1000, 5000);
 #ifdef CONFIGURATION_ORIGINAL
 static TcLimitCheck urTcLimit(1400, 30000);
@@ -73,7 +73,7 @@ const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' +
 #ifdef CONFIGURATION_LOW_COST
 #define FIRMWARE_MAJOR_VERSION   "20"
 #define FIRMWARE_MINOR_VERSION   "0"
-#define FIRMWARE_BUILD_VERSION   "1"
+#define FIRMWARE_BUILD_VERSION   "3"
 const char versionString[] = "V " FIRMWARE_MAJOR_VERSION "." FIRMWARE_MINOR_VERSION " bugfix " FIRMWARE_BUILD_VERSION;
 #endif
 
