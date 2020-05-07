@@ -214,7 +214,7 @@ static void stateWaitForDlbEnter(void)
   CoolingFanControl(preheatFanSetting);
 
   lowerFrontHeater.calculatedDutyCycle = 100.0;
-  for(i=0; i<sizeof(lowerFrontHeater.event)/sizeof(RelayTimeStamp); i++)
+  for(i=0; i<EVENT_MEMORY_COUNT; i++)
   {
     lowerFrontHeater.event[i].state = RELAY_STATE_INVALID;
   }

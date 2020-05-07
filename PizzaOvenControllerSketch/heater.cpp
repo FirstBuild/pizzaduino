@@ -20,12 +20,50 @@
   THE SOFTWARE.
  */
 
+#include <Arduino.h>
 #include "heater.h"
+#include "utility.h"
 
 static void UpdateDutyCycle(Heater *pHeater)
 {
-  
+  uint32_t currentTime = millis();
+  uint8_t currentState = pHeater->relayState;
+  uint8_t i;
+  uint32_t Ton;
+  uint32_t Toff;
 
+  for(i=0; i<EVENT_MEMORY_COUNT; i++)
+  {
+    if (pHeater->event[i].state == RELAY_STATE_INVALID)
+    {
+      break;
+    }
+  }
+
+  if (i<EVENT_MEMORY_COUNT)
+  {
+    pHeater->event[i].state = currentState;
+    pHeater->event[i].time = currentTime;
+  }
+  else
+  {
+    // we have three points, calculate the duty cycle
+    if (currentState == relayStateOn)
+    {
+      Toff = timeDiff(currentTime, pHeater->event[1].time);
+      Ton = timeDiff(pHeater->event[1].time, pHeater->event[0].time);
+    }
+    else
+    {
+      Ton = timeDiff(currentTime, pHeater->event[1].time);
+      Toff = timeDiff(pHeater->event[1].time, pHeater->event[0].time);      
+    }
+    pHeater->calculatedDutyCycle = 100.0 * Ton / (Ton + Toff);
+    // push the stack
+    pHeater->event[0] = pHeater->event[1];
+    pHeater->event[1].time = currentTime;
+    pHeater->event[1].state = currentState;
+  }
 }
 
 void UpdateHeatControl(Heater *pHeater, uint16_t currentCounterTimer)

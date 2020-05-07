@@ -724,18 +724,24 @@ void outputRelayStates(void)
 
 void outputPidDutyCycles(void)
 {
-  // 0000000000111111111122222222223
-  // 0123456789012345678901234567890
-  // PidDC 100.0000000 100.0000000
-  uint8_t msg[35];
+  // 00000000001111111111222222222233333333334
+  // 01234567890123456789012345678901234567890
+  // PidDC 100.000 100.000 100.000 100.000
+  uint8_t msg[40];
+  uint8_t num[10];
   strcpy((char *)&msg[0], "PidDC ");
-  ftoa(upperFrontPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
+  ftoa(upperFrontPidIo.Output, num, 3);
+  strcat(msg, num);
   strcat((char *)&msg[0], " ");
   #ifdef CONFIGURATION_ORIGINAL
-  ftoa(upperRearPidIo.Output, &msg[strlen((char *)&msg[0])], 7);
+  ftoa(upperRearPidIo.Output, num, 3);
+  strcat(msg, num);
   #endif
   #ifdef CONFIGURATION_LOW_COST
-  strcat((char *)&msg[0], "0.0");
+  strcat((char *)&msg[0], "0.0 ");
+  ftoa(lowerFrontHeater.calculatedDutyCycle, num, 3);
+  strcat(msg, num);
+  strcat((char *)&msg[0], " 0.0");
   #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }

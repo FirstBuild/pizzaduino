@@ -46,7 +46,9 @@ struct HeaterParameters
 typedef struct RelayTimeStamp {
   uint32_t time;
   uint8_t state;
-}
+} RelayTimeStamp;
+
+#define EVENT_MEMORY_COUNT 2
 
 struct Heater
 {
@@ -57,7 +59,7 @@ struct Heater
   bool heaterCoolDownState;
   double thermocouple;
   FilterBeLp2 tcFilter;
-  RelayTimeStamp event[3];
+  RelayTimeStamp event[EVENT_MEMORY_COUNT];
   float calculatedDutyCycle;
 };
 
