@@ -16,10 +16,5 @@ extern bool lrTcTempLimitFailed;
 #define SOME_TC_HAS_FAILED (ufTcTempLimitFailed || urTcTempLimitFailed || lfTcTempLimitFailed || lrTcTempLimitFailed)
 #define ALL_TCS_OK (!SOME_TC_HAS_FAILED)
 
-extern bool upperTempDiffExceeded;
-extern bool lowerTempDiffExceeded;
-#define TEMP_DIFF_FAIL (upperTempDiffExceeded || lowerTempDiffExceeded)
-#define TEMP_DIFFS_OK (!TEMP_DIFF_FAIL)
-
 #endif // GLOBALS_H
 

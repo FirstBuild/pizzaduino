@@ -165,7 +165,7 @@ static void stateStandbyUpdate()
   AllHeatersOffStateClear();
   if (!tcoAndFan.coolingFanHasFailed() && !tcoAndFan.tcoHasFailed() && !doorHasDeployed)
   {
-    if (powerButtonIsOn() && pizzaOvenStartRequested && ALL_TCS_OK && TEMP_DIFFS_OK)
+    if (powerButtonIsOn() && pizzaOvenStartRequested && ALL_TCS_OK)
     {
       poStateMachine.transitionTo(stateWaitForDlb);
     }
@@ -207,7 +207,7 @@ static void stateWaitForDlbUpdate(void)
   {
     poStateMachine.transitionTo(stateStandby);    
   }
-  else if (!powerButtonIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  else if (!powerButtonIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED)
   {
     pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
@@ -308,7 +308,7 @@ static void statePreheatStoneOnlyUpdate()
     oldRelayTimerCounter = currentRelayTimerCounter;
   }
 
-  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED)
   {
     pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
@@ -414,7 +414,7 @@ static void statePreheatUpdate()
     oldRelayTimerCounter = currentRelayTimerCounter;
   }
 
-  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED)
   {
     pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
@@ -535,7 +535,7 @@ static void stateHeatCycleUpdate()
     oldRelayTimerCounter = currentRelayTimerCounter;
   }
 
-  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED)
   {
     pizzaOvenStopRequested = false;
     poStateMachine.transitionTo(stateCoolDown);
@@ -614,7 +614,7 @@ static void stateIdleUpdate()
     oldRelayTimerCounter = currentRelayTimerCounter;
   }
 
-  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED || TEMP_DIFF_FAIL)
+  if (!powerButtonIsOn() || !sailSwitchIsOn() || pizzaOvenStopRequested || SOME_TC_HAS_FAILED)
   {
     Serial.println(F("Transitioning to cooldown from idle..."));
     poStateMachine.transitionTo(stateCoolDown);
@@ -690,7 +690,7 @@ static void stateCoolDownUpdate()
     return;
   }
   
-  if (powerButtonIsOn() && pizzaOvenStartRequested && ALL_TCS_OK && TEMP_DIFFS_OK)
+  if (powerButtonIsOn() && pizzaOvenStartRequested && ALL_TCS_OK)
   {
     pizzaOvenStartRequested = false;
     poStateMachine.transitionTo(stateWaitForDlb);
