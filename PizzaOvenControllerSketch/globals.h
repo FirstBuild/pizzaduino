@@ -24,8 +24,8 @@ extern bool lrTcTempLimitFailed;
 #endif
 #define ALL_TCS_OK (!SOME_TC_HAS_FAILED)
 
-extern uint8_t preheatFanSetting;
-extern uint8_t cookingFanSetting;
+extern CoolingFanSpeed preheatFanSetting;
+extern CoolingFanSpeed cookingFanSetting;
 
 #ifdef CONFIGURATION_ORIGINAL
 extern bool upperTempDiffExceeded;

@@ -117,8 +117,8 @@ bool lrTcTempLimitFailed = false;
 uint16_t lrTcLimitExceededCount = 0;
 #endif
 
-uint8_t preheatFanSetting = coolingFanLow;
-uint8_t cookingFanSetting = coolingFanLow;
+CoolingFanSpeed preheatFanSetting = coolingFanLow;
+CoolingFanSpeed cookingFanSetting = coolingFanLow;
 
 #ifdef CONFIGURATION_ORIGINAL
 bool upperTempDiffExceeded = false;
@@ -729,9 +729,9 @@ void outputPidDutyCycles(void)
   // PidDC 100.000 100.000 100.000 100.000
   uint8_t msg[40];
   uint8_t num[10];
-  strcpy((char *)&msg[0], "PidDC ");
+  strcpy((char *)msg, "PidDC ");
   ftoa(upperFrontPidIo.Output, num, 3);
-  strcat(msg, num);
+  strcat((char *)msg, (const char *)num);
   strcat((char *)&msg[0], " ");
   #ifdef CONFIGURATION_ORIGINAL
   ftoa(upperRearPidIo.Output, num, 3);
@@ -740,7 +740,7 @@ void outputPidDutyCycles(void)
   #ifdef CONFIGURATION_LOW_COST
   strcat((char *)&msg[0], "0.0 ");
   ftoa(lowerFrontHeater.calculatedDutyCycle, num, 3);
-  strcat(msg, num);
+  strcat((char *)msg, (const char *)num);
   strcat((char *)&msg[0], " 0.0");
   #endif
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
@@ -1614,8 +1614,8 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                    && (newCookingFanSetting >= coolingFanLow) 
                    && (newCookingFanSetting <= coolingFanHigh)) 
                   {
-                    preheatFanSetting = newPreheatFanSetting;
-                    cookingFanSetting = newCookingFanSetting;
+                    preheatFanSetting = (CoolingFanSpeed)newPreheatFanSetting;
+                    cookingFanSetting = (CoolingFanSpeed)newCookingFanSetting;
                     saveParametersToMemory();
                   }
                   else
