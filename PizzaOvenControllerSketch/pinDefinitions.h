@@ -68,31 +68,32 @@
 // New POMC
 ///////////////////////////////////////////////////////////////////////////////////////
 // Pin Definitions
-#define COOLING_FAN_RELAY         (12) // cooling fan relay
-#define COOLING_FAN_LOW_SPEED     ( 2) // cooling fan low speed relay PD2
-
-#define HEATER_UPPER_FRONT_DLB     (8) //Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_TRIAC_UPPER_FRONT  (A0) // triac output
-
-// Lower heater relays - These are cascaded.  Only turn on one at a time.
-#define HEATER_RELAY_LOWER_FRONT  (10) // relay output
+#define COOLING_FAN_RELAY          (PC4) // cooling fan relay
+#define COOLING_FAN_LOW_SPEED      (PC6) // cooling fan low speed relay
+#define HEATER_TRIAC_UPPER_FRONT   (PC2) // triac output for the upper heaters
+#define HEATER_UPPER_FRONT_DLB     (PD5) // Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_RELAY_LOWER_FRONT   (PC1) // relay output for the lower heaters
 
 // Other outputs
-#define BOOST_ENABLE               ( 7) //Enable 15V pull in voltage for relays
-#define RELAY_WATCHDOG             ( 6) //Signal must toggle at a rate of X Hz in order to enable relays
+#define BOOST_ENABLE               (PD4) //Enable 15V pull in voltage for relays
+#define RELAY_WATCHDOG             (PD3) //Signal must toggle at a rate of X Hz in order to enable relays
+#define DOOR_LATCH_MOTOR_DRIVE_PIN (PC5)
+#define CATALYST_HEATER_TRIAC_PIN  (PC3) // triac out to drive the catalyst heater
+#define CATALYST_HEATER_RELAY_PIN  (PD6) // the relay is inseries with the triac and is a DLB
+#define VENT_OUTPUT_PIN            (PA6) // relay to drive the motorized vent
 
 // Digital inputs
-#define VOLTAGE_DETECT             ( 5) // PD5 Used to determine supply voltage as 208VAC or 240VAC
-#define DLB_STATUS_AC_INPUT        ( 3) // PD3 AC Input 2 (J501-2) that indicates the status of the L2 panel mount DLB relays
-#define POWER_SWITCH_AC_INPUT      ( 4) // PD4 AC Input 1 (J501-1) that indicates the state of the power switch
-#define DOOR_STATUS_INPUT          (13) // PB5
-#define TCO_AC_INPUT               (A5) // PC5 AC Input 3 (J501-3) for the TCO, also port PC5
-#define DOOR_LATCH_MOTOR_HOME_PIN   (A4) // PC4
-#define DOOR_LATCH_MOTOR_DRIVE_PIN  (11) // PB3
+#define VOLTAGE_DETECT             (PD2) // Used to determine supply voltage as 208VAC or 240VAC
+#define DLB_STATUS_AC_INPUT        (PB3) // AC Input 2 (J501-2) that indicates the status of the L2 panel mount DLB relays
+#define POWER_SWITCH_AC_INPUT      (PB2) // AC Input 1 (J501-1) that indicates the state of the power switch
+#define DOOR_STATUS_INPUT          (PA7)
+#define TCO_AC_INPUT               (PB0) // AC Input 3 (J501-3) for the TCO, also port PC5
+#define DOOR_LATCH_MOTOR_HOME_PIN  (PA1)
+#define VENT_INPUT_PIN             (PA3)
 
 // Temperature inputs
-#define ANALOG_THERMO_UPPER_FRONT  (A7)
-#define ANALOG_THERMO_LOWER_FRONT  (A2)
+#define ANALOG_THERMO_UPPER_FRONT  (PA4)
+#define ANALOG_THERMO_LOWER_FRONT  (PA5)
 
 #endif
 
