@@ -33,8 +33,8 @@
 #define MAX_CHANNELS 8
 
 static uint16_t adcValue[MAX_CHANNELS] = {0, 0, 0, 0, 0, 0, 0, 0};
-static bool pinToRead[MAX_CHANNELS] = {0, 0, 0, 0, 0, 0, 0, 0};
-static uint8_t a2dPin = 0;
+static bool channelToRead[MAX_CHANNELS] = {0, 0, 0, 0, 0, 0, 0, 0};
+static uint8_t a2dChannel = 0;
 
 enum {
   a2d_idle,
@@ -47,11 +47,11 @@ static uint8_t a2dState = a2d_idle;
 
 void adcReadInit(uint8_t pin)
 {
-  pin = pin - 14;
-  Serial.print("Setting pin ");
+  pin = pin - PIN_A0;
+  Serial.print("Setting channel ");
   Serial.print(pin);
   Serial.println(" for A2D scanning.");
-  pinToRead[pin] = true;
+  channelToRead[pin] = true;
 }
 
 static bool itIsTimeToStartScanning(void)
@@ -79,21 +79,21 @@ void adcReadRun(void)
     case a2d_idle:
       if (itIsTimeToStartScanning())
       {
-        a2dPin = 0;
+        a2dChannel = 0;
         a2dState = a2d_SetMux;
       }
       break;
 
     case a2d_SetMux:
-      if (pinToRead[a2dPin])
+      if (channelToRead[a2dChannel])
       {
-        ADMUX = (DEFAULT << 6) | (a2dPin & 0x07);
+        ADMUX = (DEFAULT << 6) | (a2dChannel & 0x07);
         oldTime = micros();
         a2dState = a2d_InputSettleWait;
       }
       else
       {
-        a2dPin++;
+        a2dChannel++;
       }
       break;
 
@@ -111,14 +111,14 @@ void adcReadRun(void)
       {
         low  = ADCL;
         high = ADCH;
-        adcValue[a2dPin] = (high << 8) | low;
-        a2dPin++;
+        adcValue[a2dChannel] = (high << 8) | low;
+        a2dChannel++;
         a2dState = a2d_SetMux;
       }
       break;
   }
 
-  if (a2dPin >= MAX_CHANNELS)
+  if (a2dChannel >= MAX_CHANNELS)
   {
     a2dState = a2d_idle;
   }
@@ -127,6 +127,6 @@ void adcReadRun(void)
 
 uint16_t getA2DReadingForPin(uint8_t pin)
 {
-  return adcValue[pin - 14];
+  return adcValue[pin - PIN_A0];
 }
 

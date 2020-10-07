@@ -29,12 +29,5 @@
 
 void handleRelayWatchdog(void)
 {
-  static unsigned long oldTime = micros();
-  unsigned long newTime = micros();
-
-  if ((newTime < oldTime) || ((newTime - oldTime) >= 500))
-  {
-    digitalWrite(RELAY_WATCHDOG, !digitalRead(RELAY_WATCHDOG));
-    oldTime = newTime;
-  }
+  digitalWrite(RELAY_WATCHDOG, !digitalRead(RELAY_WATCHDOG));
 }

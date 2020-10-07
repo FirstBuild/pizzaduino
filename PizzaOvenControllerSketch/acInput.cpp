@@ -24,6 +24,7 @@
   THE SOFTWARE.
 */
 
+#ifdef CONFIGURATION_ORIGINAL
 /*
  * Port pin interrupt stuff
  * PD5 - PCINT21 - Pin change interrupt 21 - Using PCINT2
@@ -39,19 +40,59 @@
  * AC Input 3 - PC5 - Arduino pin A5 - TCO Input
  * AC voltage detect input - PD5/OC0B/T1 - Arduino pin D5
  */
+#endif
 
-#include "acInput.h"
+#ifdef CONFIGURATION_LOW_COST
+/*
+ * Port pin interrupt stuff
+ * PB3 - PCINT11 - Pin change interrupt 11 - Using PCI1
+ * PB2 - PCINT10 - Pin change interrupt 10 - Using PCI1
+ * PB0 - PCINT8  - Pin change interrupt  8 - Using PCI1
+ * PD2 - PCINT26 - Pin change interrupt 26 - Using PCI3
+*/
+
+/*
+ * Pin definitions
+ * AC Input 1 - PB3 - Power button input
+ * AC Input 2 - PB2 - Sail switch input
+ * AC Input 3 - PB0 - TCO Input
+ * AC voltage detect input - PD2
+ */
+#endif
+
+
 #include <Arduino.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include "acInput.h"
+#include "config.h"
+#include "pinDefinitions.h"
 
+#ifdef CONFIGURATION_ORIGINAL
 #define AC_POWER_PIN (PIND & (1<<PD5))
 #define POWER_BUTTON_PIN (PIND & (1<<PD4))
+#endif
 
+#ifdef CONFIGURATION_LOW_COST
+typedef struct AcInputDefinition
+{
+  volatile uint32_t count;
+  volatile uint8_t lastValue;
+  volatile bool state;
+  volatile byte *pInput;
+  volatile byte mask;
+} AcInputDefinition;
+
+static AcInputDefinition voltageDetect;
+static AcInputDefinition sailSwitch;
+static AcInputDefinition tco;
+static AcInputDefinition powerButton;
+#endif
+
+#ifdef CONFIGURATION_ORIGINAL
 static volatile uint8_t acPowerPinLastValue = AC_POWER_PIN;
 static volatile uint8_t powerButtonPinLastValue = POWER_BUTTON_PIN;
 
-static uint32_t oldTime = 0;
 static bool powerButtonState = false;
 static bool sailSwitchState = false;
 static bool tcoState = false;
@@ -60,9 +101,22 @@ static volatile uint32_t powerButtonCount = 0;
 static volatile uint32_t sailSwitchCount = 0;
 static volatile uint32_t tcoCount = 0;
 static volatile uint32_t acPowerPinCount = 0;
+#endif
 
+static void configureInputPin(byte pin, AcInputDefinition *pDef)
+{
+  pDef->pInput = portInputRegister(digitalPinToPort(pin));
+  pDef->mask = digitalPinToBitMask(pin);
+  pinMode(pin, INPUT);
+  *digitalPinToPCMSK(pin) |= bit (digitalPinToPCMSKbit(pin));  // enable pin
+  PCIFR  |= bit (digitalPinToPCICRbit(pin)); // clear any outstanding interrupt
+  PCICR  |= bit (digitalPinToPCICRbit(pin)); // enable interrupt for the group
+}
+
+#ifdef CONFIGURATION_ORIGINAL
 static void pciSetup(byte pin)
 {
+  pinMode(pin, INPUT);
   *digitalPinToPCMSK(pin) |= bit (digitalPinToPCMSKbit(pin));  // enable pin
   PCIFR  |= bit (digitalPinToPCICRbit(pin)); // clear any outstanding interrupt
   PCICR  |= bit (digitalPinToPCICRbit(pin)); // enable interrupt for the group
@@ -91,9 +145,36 @@ void myINT1_vect(void)
 {
   sailSwitchCount++;
 }
+#endif
+
+#ifdef CONFIGURATION_LOW_COST
+static void UpdateInput(AcInputDefinition *pInput)
+{
+  byte current = *pInput->pInput & pInput->mask;
+
+  if(pInput->lastValue != current)
+  {
+    pInput->count++;
+    pInput->lastValue = current;
+  }
+}
+
+ISR (PCINT1_vect)
+{
+  UpdateInput(&sailSwitch);
+  UpdateInput(&powerButton);
+  UpdateInput(&tco);
+}
+
+ISR (PCINT3_vect)
+{
+  UpdateInput(&voltageDetect);
+}
+#endif
 
 void acInputsInit(void)
 {
+  #ifdef CONFIGURATION_ORIGINAL
   pinMode(A5, INPUT);
   // Arduino pin 4 is tied to 328P port pin PD4, use the pin change interrupt for input
   pciSetup(4);
@@ -103,54 +184,95 @@ void acInputsInit(void)
   attachInterrupt(digitalPinToInterrupt(3), myINT1_vect, CHANGE);
   // Arduino pin A5 is tied to 328P port pin PC5, use the pin change interrupt for input
   pciSetup(A5);
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  configureInputPin(VOLTAGE_DETECT_INPUT, &voltageDetect);
+  configureInputPin(DLB_STATUS_AC_INPUT, &sailSwitch);
+  configureInputPin(POWER_SWITCH_AC_INPUT, &powerButton);
+  configureInputPin(TCO_AC_INPUT, &tco);
+  #endif
+}
+
+static void UpdateState(AcInputDefinition *pInput)
+{
+  pInput->state = (pInput->count > 5) && (voltageDetect.state);
+  pInput->count = 0;
 }
 
 void acInputsRun(void)
 {
   uint32_t newTime = millis();
   static uint32_t oldAcTime = 0;
+  static uint32_t oldTime = 0;
 
   if ((newTime - oldAcTime) >= 60)
   {
     oldAcTime = newTime;
     noInterrupts();
+    #ifdef CONFIGURATION_ORIGINAL
     acPowerPinState = acPowerPinCount > 4;
     acPowerPinCount = 0;
+    #endif
+    #ifdef CONFIGURATION_LOW_COST
+    voltageDetect.state = voltageDetect.count > 4;
+    voltageDetect.count = 0;
+    #endif
     interrupts();
   }
 
   if ((newTime - oldTime) >= 120)
   {
     oldTime = newTime;
-    oldAcTime = newTime;
     noInterrupts();
+    #ifdef CONFIGURATION_ORIGINAL
     powerButtonState = (powerButtonCount > 5) && acPowerPinState;
     sailSwitchState = (sailSwitchCount > 5) && acPowerPinState;
     tcoState = (tcoCount > 5) && acPowerPinState;
     powerButtonCount = 0;
     sailSwitchCount = 0;
     tcoCount = 0;
+    #endif
+    #ifdef CONFIGURATION_LOW_COST
+    UpdateState(&tco);
+    UpdateState(&sailSwitch);
+    UpdateState(&powerButton);
+    #endif
     interrupts();
   }
 }
 
 bool powerButtonIsOn(void)
 {
+  #ifdef CONFIGURATION_LOW_COST
+  return powerButton.state;
+  #else
   return powerButtonState;
+  #endif  
 }
 
 bool sailSwitchIsOn(void)
 {
+  #ifdef CONFIGURATION_LOW_COST
+  return sailSwitch.state;
+  #else
   return sailSwitchState;
+  #endif  
 }
 
 bool tcoInputIsOn(void)
 {
+  #ifdef CONFIGURATION_LOW_COST
+  return tco.state;
+  #else
   return tcoState;
+  #endif  
 }
 
 bool acPowerIsPresent(void)
 {
+  #ifdef CONFIGURATION_LOW_COST
+  return voltageDetect.state;
+  #else
   return acPowerPinState;
+  #endif  
 }
-

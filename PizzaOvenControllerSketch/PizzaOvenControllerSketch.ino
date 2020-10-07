@@ -790,9 +790,28 @@ void outputFanSettings()
   serialCommWrapperSendMessage(&msg[0], strlen((char *)&msg[0]));
 }
 
+typedef void (*PrintWorker)(void);
+static const PrintWorker printWorker[] =
+{
+  outputTemps,
+  outputAcInputStates,
+  outputDoorStatus,
+  outputCookingState,
+  outputFailures,
+  outputRelayStates,
+  outputPidDutyCycles,
+  outputTimeInfo,
+  outputDomeState,
+  outputDoorLatchState,
+  outputFanSettings,
+};
+#define PRINT_WORKER_COUNT (sizeof(printWorker)/sizeof(PrintWorker))
+
 void PeriodicOutputInfo()
 {
   static uint8_t printPhase = 0;
+  static uint8_t printWorkerIndex = 0;
+  static uint32_t oldTime = 0;
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
     double pTerm;
@@ -808,30 +827,26 @@ void PeriodicOutputInfo()
       {
         printPhase++;
         outputTempPeriodic = false;
+        printWorkerIndex = 0;
+        oldTime = 0;
       }
       break;
+
     case 1:
-      handleRelayWatchdog();
-      outputTemps();
-      outputAcInputStates();
-      outputDoorStatus();
-      handleRelayWatchdog();
-      outputCookingState();
-      outputFailures();
-      handleRelayWatchdog();
-      outputRelayStates();
-      outputPidDutyCycles();
-      outputTimeInfo();
-      handleRelayWatchdog();
-      printPhase++;
+      if (printWorkerIndex < PRINT_WORKER_COUNT)
+      {
+        if ((millis() - oldTime) > 24)
+        {
+          oldTime = millis();
+          printWorker[printWorkerIndex++]();
+        }
+      }
+      else
+      {
+        printPhase++;
+      }
       break;
-    case 2:
-      outputDomeState();
-      outputDoorLatchState();
-      outputFanSettings();
-      printPhase++;
-      break;
-    
+
 #ifdef USE_PID
 #ifdef ENABLE_PID_TUNING
     case 3:
@@ -961,6 +976,8 @@ void HeaterTimerInterrupt()
     countOutputTempPeriodic = 0;
     outputTempPeriodic = true;
   }
+
+  handleRelayWatchdog();
 }
 
 void saveParametersToMemory(void)
@@ -1122,6 +1139,9 @@ void setup()
     Serial.println(F("DEBUG Reading parameters from EEPROM memory."));
     readParametersFromMemory();
   }
+
+  if (preheatFanSetting > coolingFanHigh) preheatFanSetting = coolingFanLow;
+  if (cookingFanSetting > coolingFanHigh) preheatFanSetting = coolingFanLow;
   
   acInputsInit();
 
@@ -1668,13 +1688,11 @@ void loop()
 
   // pet the watchdog
   wdt_reset();
-  handleRelayWatchdog();
 
   // Gather inputs and process
   adcReadRun();
   acInputsRun();
   readThermocouples();
-  handleRelayWatchdog();
   if (Serial.available() > 0)
   {
     serialCommWrapperHandleByte(Serial.read());
@@ -1697,13 +1715,10 @@ void loop()
     outputAcInputStates();
   }
 
-  handleRelayWatchdog();
   updateCookingStateMachine();
 
   boostEnable(relayBoostRun);
   relayDriverRun();
-
-  handleRelayWatchdog();
 
   LatchMotorPosition_Run();
 
@@ -1713,7 +1728,6 @@ void loop()
 #ifdef USE_PID
 
   #define PID_GAIN_SHIFT_TEMP_DIFF 25.0
-  handleRelayWatchdog();
   upperFrontPidIo.Setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn) / 2;
   #ifdef CONFIGURATION_ORIGINAL
   upperRearPidIo.Setpoint = (upperRearHeater.parameter.tempSetPointHighOff + upperRearHeater.parameter.tempSetPointLowOn) / 2;
@@ -1738,12 +1752,9 @@ void loop()
   }
   #endif
 
-  handleRelayWatchdog();
   upperFrontPID.Compute();
-  handleRelayWatchdog();
   #ifdef CONFIGURATION_ORIGINAL
   upperRearPID.Compute();
-  handleRelayWatchdog();
   #endif
   ConvertHeaterPercentCounts();
   upperFrontHeater.heaterCountsOff = (uint16_t)(((uint32_t)((upperFrontPidIo.Output * MILLISECONDS_PER_SECOND + 50)) / 100)) * triacPeriodSeconds;
