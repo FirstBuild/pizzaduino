@@ -31,17 +31,17 @@
 // Original POMC
 ///////////////////////////////////////////////////////////////////////////////////////
 // Pin Definitions
-#define COOLING_FAN_RELAY         (12) // cooling fan relay
-#define COOLING_FAN_LOW_SPEED     ( 2) // cooling fan low speed relay PD2
+#define COOLING_FAN_RELAY          (12) // cooling fan relay
+#define COOLING_FAN_LOW_SPEED      ( 2) // cooling fan low speed relay PD2
 
-#define HEATER_UPPER_FRONT_DLB     (8) //Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_TRIAC_UPPER_FRONT  (A0) // triac output
-#define HEATER_UPPER_REAR_DLB      ( 9) //Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_TRIAC_UPPER_REAR   (A1) // triac output
+#define HEATER_UPPER_FRONT_DLB     ( 8) // Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_TRIAC_UPPER_FRONT   (A0) // triac output
+#define HEATER_UPPER_REAR_DLB      ( 9) // Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_TRIAC_UPPER_REAR    (A1) // triac output
 
 // Lower heater relays - These are cascaded.  Only turn on one at a time.
-#define HEATER_RELAY_LOWER_FRONT  (10) // relay output
-#define HEATER_RELAY_LOWER_REAR   (11) // relay output
+#define HEATER_RELAY_LOWER_FRONT   (10) // relay output
+#define HEATER_RELAY_LOWER_REAR    (11) // relay output
 
 // Other outputs
 #define BOOST_ENABLE               ( 7) //Enable 15V pull in voltage for relays
@@ -71,8 +71,8 @@
 #define COOLING_FAN_RELAY          (PIN_PC4) // cooling fan relay
 #define COOLING_FAN_LOW_SPEED      (PIN_PC6) // cooling fan low speed relay
 #define HEATER_TRIAC_UPPER_FRONT   (PIN_PC2) // triac output for the upper heaters
-#define HEATER_UPPER_FRONT_DLB     (PIN_PD5) // Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_RELAY_LOWER_FRONT   (PIN_PC1) // relay output for the lower heaters
+#define HEATER_UPPER_FRONT_DLB     (PIN_PC1) // Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_RELAY_LOWER_FRONT   (PIN_PD5) // relay output for the lower heaters
 
 // Other outputs
 #define BOOST_ENABLE               (PIN_PD4) //Enable 15V pull in voltage for relays
