@@ -33,6 +33,7 @@ typedef struct MemoryStore
   HeaterParameters upperRearHeaterParameters;
   HeaterParameters lowerFrontHeaterParameters;
   HeaterParameters lowerRearHeaterParameters;
+  HeaterParameters catalystHeaterParameters;
   uint16_t triacPeriodSeconds;
   uint16_t relayPeriodSeconds;
   PidParameters upperFrontPidParameters;

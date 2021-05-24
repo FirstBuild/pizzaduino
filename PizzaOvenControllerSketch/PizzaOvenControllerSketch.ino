@@ -153,6 +153,9 @@ Heater lowerFrontHeater = {{true,  600,  650,  DEFAULT_LOWER_FRONT_ON_PERCENT, D
 Heater upperRearHeater  = {{true, 1100, 1200,  DEFAULT_TRIAC_ON_PERCENT,       DEFAULT_TRIAC_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
 Heater lowerRearHeater  = {{true,  575,  625,  DEFAULT_LOWER_REAR_ON_PERCENT,  DEFAULT_LOWER_REAR_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
 #endif
+#ifdef CONFIGURATION_LOW_COST
+Heater catalystHeater = {{true, 700, 1200, DEFAULT_TRIAC_ON_PERCENT, DEFAULT_LOWER_FRONT_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
+#endif
 
 // convenience array, could go into flash
 #ifdef CONFIGURATION_ORIGINAL
@@ -420,6 +423,11 @@ void ConvertHeaterPercentCounts(void)
   lowerRearHeater.heaterCountsOn   = (((uint32_t)lowerRearHeater.parameter.onPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
   lowerRearHeater.heaterCountsOff  = (((uint32_t)lowerRearHeater.parameter.offPercent  * MILLISECONDS_PER_SECOND + 50) / 100) * relayPeriodSeconds;
   #endif
+  
+  #ifdef CONFIGURATION_LOW_COST
+  catalystHeater.heaterCountsOn    = (((uint32_t)catalystHeater.parameter.onPercent    * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  catalystHeater.heaterCountsOff   = (((uint32_t)catalystHeater.parameter.offPercent   * MILLISECONDS_PER_SECOND + 50) / 100) * triacPeriodSeconds;
+  #endif
 }
 
 void UpdateHeaterHardware(void)
@@ -429,6 +437,9 @@ void UpdateHeaterHardware(void)
   #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_TRIAC_UPPER_REAR, upperRearHeater.relayState);
   changeRelayState(HEATER_RELAY_LOWER_REAR, lowerRearHeater.relayState);
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  changeRelayState(CATALYST_HEATER_TRIAC_PIN, catalystHeater.relayState);
   #endif
 }
 
@@ -448,6 +459,9 @@ void AllHeatersOffStateClear(void)
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOff);
   #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOff);
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  changeRelayState(CATALYST_HEATER_RELAY_PIN, relayStateOff);
   #endif
 }
 
@@ -988,6 +1002,9 @@ void saveParametersToMemory(void)
   pizzaMemoryWrite((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryWrite((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
   #endif
+  #ifdef CONFIGURATION_LOW_COST
+  pizzaMemoryWrite((uint8_t*)&catalystHeater.parameter, offsetof(MemoryStore, catalystHeaterParameters), sizeof(HeaterParameters));
+  #endif
   pizzaMemoryWrite((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
   pizzaMemoryWrite((uint8_t*)&relayPeriodSeconds, offsetof(MemoryStore, relayPeriodSeconds), sizeof(relayPeriodSeconds));
 #ifdef USE_PID
@@ -1016,6 +1033,9 @@ static void readParametersFromMemory(void)
   pizzaMemoryRead((uint8_t*)&upperRearHeater.parameter, offsetof(MemoryStore, upperRearHeaterParameters), sizeof(HeaterParameters));
   pizzaMemoryRead((uint8_t*)&lowerRearHeater.parameter, offsetof(MemoryStore, lowerRearHeaterParameters), sizeof(HeaterParameters));
   #endif
+  #ifdef CONFIGURATION_LOW_COST
+  pizzaMemoryRead((uint8_t*)&catalystHeater.parameter, offsetof(MemoryStore, catalystHeaterParameters), sizeof(HeaterParameters));
+  #endif
 
   // restore default percentages on read
   upperFrontHeater.parameter.onPercent = DEFAULT_TRIAC_ON_PERCENT;
@@ -1027,6 +1047,10 @@ static void readParametersFromMemory(void)
   upperRearHeater.parameter.offPercent = DEFAULT_TRIAC_OFF_PERCENT;
   lowerRearHeater.parameter.onPercent = DEFAULT_LOWER_REAR_ON_PERCENT;
   lowerRearHeater.parameter.offPercent = DEFAULT_LOWER_REAR_OFF_PERCENT;
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
+  catalystHeater.parameter.onPercent = DEFAULT_TRIAC_ON_PERCENT;
+  catalystHeater.parameter.offPercent = DEFAULT_TRIAC_OFF_PERCENT;
   #endif
 
   pizzaMemoryRead((uint8_t*)&triacPeriodSeconds, offsetof(MemoryStore, triacPeriodSeconds), sizeof(triacPeriodSeconds));
@@ -1090,6 +1114,8 @@ void setup()
     #endif
     #ifdef CONFIGURATION_LOW_COST
     DOOR_LATCH_MOTOR_DRIVE_PIN
+    CATALYST_HEATER_RELAY_PIN, 
+    CATALYST_HEATER_TRIAC_PIN,
     #endif
   };
   uint8_t adcsToInitialize[] = {
@@ -1383,6 +1409,12 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
                 }
                 pHeater->parameter.tempSetPointHighOff = newSetpoint;
               }
+
+              if (pHeater == &upperFrontHeater) 
+              {
+                updateCatalystTriacFromUpperFrontHeaterSetpoint();
+              }
+
               saveParametersToMemory();
             }
             else

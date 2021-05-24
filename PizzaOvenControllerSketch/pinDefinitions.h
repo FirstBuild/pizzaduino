@@ -79,7 +79,7 @@
 #define RELAY_WATCHDOG             (PIN_PD3) //Signal must toggle at a rate of X Hz in order to enable relays
 #define DOOR_LATCH_MOTOR_DRIVE_PIN (PIN_PC5)
 #define CATALYST_HEATER_TRIAC_PIN  (PIN_PC3) // triac out to drive the catalyst heater
-#define CATALYST_HEATER_RELAY_PIN  (PIN_PD6) // the relay is inseries with the triac and is a DLB
+#define CATALYST_HEATER_RELAY_PIN  (PIN_PD6) // the relay is in series with the triac and is a DLB
 #define VENT_OUTPUT_PIN            (PIN_PA6) // relay to drive the motorized vent
 
 // Digital inputs
