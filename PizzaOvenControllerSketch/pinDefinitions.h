@@ -71,8 +71,8 @@
 #define COOLING_FAN_RELAY          (PIN_PC4) // cooling fan relay
 #define COOLING_FAN_LOW_SPEED      (PIN_PC6) // cooling fan low speed relay
 #define HEATER_TRIAC_UPPER_FRONT   (PIN_PC2) // triac output for the upper heaters
-#define HEATER_UPPER_FRONT_DLB     (PIN_PC1) // Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_RELAY_LOWER_FRONT   (PIN_PD5) // relay output for the lower heaters
+#define HEATER_UPPER_FRONT_DLB     (PIN_PD5) // Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_RELAY_LOWER_FRONT   (PIN_PC1) // relay output for the lower heaters
 
 // Other outputs
 #define BOOST_ENABLE               (PIN_PD4) //Enable 15V pull in voltage for relays
