@@ -46,6 +46,7 @@ void requestPizzaOvenStart(void);
 void requestPizzaOvenStop(void);
 void setDomeState(uint8_t state);
 uint8_t getDomeState(void);
+void updateCatalystTriacFromUpperFrontHeaterSetpoint(void);
 void theSetpointWasIncreased(thisSetpointIncreased which);
 
 #endif // COOKING_STATE_MACHINE_H

@@ -408,7 +408,8 @@ static void statePreheatEnter()
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
-  #endif#ifdef CONFIGURATION_LOW_COST
+  #endif
+  #ifdef CONFIGURATION_LOW_COST
   // Enable the Catalyst Heater Relay because we may need it. 
   changeRelayState(CATALYST_HEATER_RELAY_PIN, relayStateOn);
   #endif
