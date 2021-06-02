@@ -3,10 +3,13 @@
 #include "config.h"
 
 extern Heater upperFrontHeater;
-extern Heater  lowerFrontHeater;
+extern Heater lowerFrontHeater;
 #ifdef CONFIGURATION_ORIGINAL
 extern Heater upperRearHeater;
 extern Heater lowerRearHeater;
+#endif
+#ifdef CONFIGURATION_LOW_COST
+extern Heater catalystHeater; 
 #endif
 extern volatile uint32_t triacTimeBase;
 extern volatile uint32_t relayTimeBase;

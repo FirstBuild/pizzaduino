@@ -31,17 +31,17 @@
 // Original POMC
 ///////////////////////////////////////////////////////////////////////////////////////
 // Pin Definitions
-#define COOLING_FAN_RELAY         (12) // cooling fan relay
-#define COOLING_FAN_LOW_SPEED     ( 2) // cooling fan low speed relay PD2
+#define COOLING_FAN_RELAY          (12) // cooling fan relay
+#define COOLING_FAN_LOW_SPEED      ( 2) // cooling fan low speed relay PD2
 
-#define HEATER_UPPER_FRONT_DLB     (8) //Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_TRIAC_UPPER_FRONT  (A0) // triac output
-#define HEATER_UPPER_REAR_DLB      ( 9) //Relay that provides L1 to the triac, must be ON for heat
-#define HEATER_TRIAC_UPPER_REAR   (A1) // triac output
+#define HEATER_UPPER_FRONT_DLB     ( 8) // Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_TRIAC_UPPER_FRONT   (A0) // triac output
+#define HEATER_UPPER_REAR_DLB      ( 9) // Relay that provides L1 to the triac, must be ON for heat
+#define HEATER_TRIAC_UPPER_REAR    (A1) // triac output
 
 // Lower heater relays - These are cascaded.  Only turn on one at a time.
-#define HEATER_RELAY_LOWER_FRONT  (10) // relay output
-#define HEATER_RELAY_LOWER_REAR   (11) // relay output
+#define HEATER_RELAY_LOWER_FRONT   (10) // relay output
+#define HEATER_RELAY_LOWER_REAR    (11) // relay output
 
 // Other outputs
 #define BOOST_ENABLE               ( 7) //Enable 15V pull in voltage for relays
@@ -79,7 +79,7 @@
 #define RELAY_WATCHDOG             (PIN_PD3) //Signal must toggle at a rate of X Hz in order to enable relays
 #define DOOR_LATCH_MOTOR_DRIVE_PIN (PIN_PC5)
 #define CATALYST_HEATER_TRIAC_PIN  (PIN_PC3) // triac out to drive the catalyst heater
-#define CATALYST_HEATER_RELAY_PIN  (PIN_PD6) // the relay is inseries with the triac and is a DLB
+#define CATALYST_HEATER_RELAY_PIN  (PIN_PD6) // the relay is in series with the triac and is a DLB
 #define VENT_OUTPUT_PIN            (PIN_PA6) // relay to drive the motorized vent
 
 // Digital inputs

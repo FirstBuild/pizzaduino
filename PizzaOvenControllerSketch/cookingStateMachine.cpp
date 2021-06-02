@@ -94,6 +94,29 @@ uint8_t getDomeState(void)
   return domeOn ? 1 : 0;
 }
 
+void updateCatalystTriacFromUpperFrontHeaterSetpoint(void)
+{
+  uint16_t upperSetpoint = upperFrontHeater.parameter.tempSetPointHighOff;
+  uint16_t lowerSetpoint = upperFrontHeater.parameter.tempSetPointLowOn;
+  uint16_t setpoint = (upperSetpoint + lowerSetpoint) / 2;
+  if (setpoint >= 700 && setpoint <= 900)
+  {
+    catalystHeater.parameter.onPercent = 100;
+    catalystHeater.parameter.offPercent = 0;
+  }
+  else if (setpoint > 900 && setpoint <= 1200)
+  {
+    uint8_t catalystDutyCycle = (setpoint - 900) / 3;
+    catalystHeater.parameter.onPercent = catalystDutyCycle;
+    catalystHeater.parameter.offPercent = 100 - catalystDutyCycle;
+  }
+  else
+  {
+    catalystHeater.parameter.onPercent = 0;
+    catalystHeater.parameter.offPercent = 100;
+  }
+}
+
 void theSetpointWasIncreased(thisSetpointIncreased which)
 {
   setpointIncreaseOccurred = true;
@@ -319,6 +342,9 @@ static void statePreheatStoneOnlyUpdate()
   #ifdef CONFIGURATION_ORIGINAL
   upperRearHeater.relayState = relayStateOff;
   #endif
+  #ifdef CONFIGURATION_LOW_COST
+  catalystHeater.relayState = relayStateOff;
+  #endif
   UpdateHeaterHardware();
 
   // Handle relay control
@@ -382,6 +408,9 @@ static void statePreheatEnter()
   changeRelayState(HEATER_UPPER_FRONT_DLB, relayStateOn);
   #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
+  #endif#ifdef CONFIGURATION_LOW_COST
+  // Enable the Catalyst Heater Relay because we may need it. 
+  changeRelayState(CATALYST_HEATER_RELAY_PIN, relayStateOn);
   #endif
   
   upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
@@ -434,6 +463,9 @@ static void statePreheatUpdate()
 #else
     UpdateHeatControl(&upperFrontHeater, currentTriacTimerCounter);
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
+#endif
+#ifdef CONFIGURATION_LOW_COST
+    UpdateHeatControl(&catalystHeater, currentTriacTimerCounter);
 #endif
 
     UpdateHeaterHardware();
@@ -523,6 +555,9 @@ static void stateHeatCycleEnter()
   #ifdef CONFIGURATION_ORIGINAL
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
   #endif
+  #ifdef CONFIGURATION_LOW_COST
+  changeRelayState(CATALYST_HEATER_RELAY_PIN, relayStateOn);
+  #endif
 
   if (upperFrontPID.GetMode() == MANUAL) {
     upperFrontPidIo.Output = getUFSeedValue(upperFrontHeater.thermocouple);
@@ -575,6 +610,9 @@ static void stateHeatCycleUpdate()
     #ifdef CONFIGURATION_ORIGINAL
     UpdateHeatControl(&upperRearHeater, currentTriacTimerCounter);
     #endif
+#endif
+#ifdef CONFIGURATION_LOW_COST
+    UpdateHeatControl(&catalystHeater, currentTriacTimerCounter);
 #endif
 
     UpdateHeaterHardware();
@@ -664,7 +702,7 @@ static void stateIdleUpdate()
   upperFrontHeater.relayState = relayStateOff;
   #ifdef CONFIGURATION_ORIGINAL
   upperRearHeater.relayState = relayStateOff;
-  #endif
+  #endif       
   UpdateHeaterHardware();
 
   // Handle relay control
