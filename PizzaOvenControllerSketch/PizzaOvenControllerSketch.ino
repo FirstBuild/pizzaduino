@@ -50,8 +50,8 @@
 #include "doorLatchMotor.h"
 
 static TcoAndFan tcoAndFan;
-static TcLimitCheck ufTcLimit(1600, 30000);
-static TcLimitCheck lfTcLimit(1000, 5000);
+static TcLimitCheck ufTcLimit(3200, 30000);
+static TcLimitCheck lfTcLimit(2000, 5000);
 #ifdef CONFIGURATION_ORIGINAL
 static TcLimitCheck urTcLimit(1400, 30000);
 static TcLimitCheck lrTcLimit(1000, 5000);
@@ -1417,6 +1417,7 @@ static void handleIncomingMessage(uint8_t *pData, uint8_t length)
 
               if (pHeater == &upperFrontHeater) 
               {
+                Serial.println(F("DEBUG Updating catalyst heater duty cycle."));
                 updateCatalystTriacFromUpperFrontHeaterSetpoint();
               }
 
