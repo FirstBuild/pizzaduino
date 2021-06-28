@@ -73,7 +73,7 @@ const char versionString[] = {'V', ' ', '0' + FIRMWARE_MAJOR_VERSION, '.', '0' +
 #ifdef CONFIGURATION_LOW_COST
 #define FIRMWARE_MAJOR_VERSION   "20"
 #define FIRMWARE_MINOR_VERSION   "0"
-#define FIRMWARE_BUILD_VERSION   "4"
+#define FIRMWARE_BUILD_VERSION   "5"
 const char versionString[] = "V " FIRMWARE_MAJOR_VERSION "." FIRMWARE_MINOR_VERSION " bugfix " FIRMWARE_BUILD_VERSION;
 #endif
 
@@ -154,7 +154,7 @@ Heater upperRearHeater  = {{true, 1100, 1200,  DEFAULT_TRIAC_ON_PERCENT,       D
 Heater lowerRearHeater  = {{true,  575,  625,  DEFAULT_LOWER_REAR_ON_PERCENT,  DEFAULT_LOWER_REAR_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
 #endif
 #ifdef CONFIGURATION_LOW_COST
-Heater catalystHeater = {{true, 700, 1200, DEFAULT_TRIAC_ON_PERCENT, DEFAULT_LOWER_FRONT_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
+Heater catalystHeater   = {{true, 1100, 1200, DEFAULT_TRIAC_ON_PERCENT, DEFAULT_TRIAC_OFF_PERCENT}, 0, 0, relayStateOff, false, 0};
 #endif
 
 // convenience array, could go into flash
@@ -453,6 +453,11 @@ void AllHeatersOffStateClear(void)
 		aHeaters[i]->relayState = relayStateOff;
 		aHeaters[i]->heaterCoolDownState = false;
 	}
+
+#ifdef CONFIGURATION_LOW_COST
+  catalystHeater.relayState = relayStateOff;
+  catalystHeater.heaterCoolDownState = false;
+#endif
 
   UpdateHeaterHardware();
 

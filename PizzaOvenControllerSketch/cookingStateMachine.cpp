@@ -96,24 +96,27 @@ uint8_t getDomeState(void)
 
 void updateCatalystTriacFromUpperFrontHeaterSetpoint(void)
 {
-  uint16_t upperSetpoint = upperFrontHeater.parameter.tempSetPointHighOff;
-  uint16_t lowerSetpoint = upperFrontHeater.parameter.tempSetPointLowOn;
-  uint16_t setpoint = (upperSetpoint + lowerSetpoint) / 2;
+  uint16_t setpoint = (upperFrontHeater.parameter.tempSetPointHighOff + upperFrontHeater.parameter.tempSetPointLowOn)/2;
+
   if (setpoint >= 700 && setpoint <= 900)
   {
-    catalystHeater.parameter.onPercent = 100;
-    catalystHeater.parameter.offPercent = 0;
+    catalystHeater.parameter.onPercent = 0;
+    catalystHeater.parameter.offPercent = 101;
+    Serial.println(F("DEBUG setting catalyst heater on due to setpoint within range"));
   }
   else if (setpoint > 900 && setpoint <= 1200)
   {
-    uint8_t catalystDutyCycle = (setpoint - 900) / 3;
-    catalystHeater.parameter.onPercent = catalystDutyCycle;
-    catalystHeater.parameter.offPercent = 100 - catalystDutyCycle;
+    uint16_t catalystDutyCycle = 100 - ((setpoint - 900) / 3);
+    catalystHeater.parameter.onPercent = 0;
+    catalystHeater.parameter.offPercent = catalystDutyCycle;
+    Serial.print(F("DEBUG setting catalyst duty cycle to "));
+    Serial.println(catalystDutyCycle);
   }
   else
   {
-    catalystHeater.parameter.onPercent = 0;
-    catalystHeater.parameter.offPercent = 100;
+    catalystHeater.parameter.onPercent = 101;
+    catalystHeater.parameter.offPercent = 0;
+    Serial.println(F("DEBUG setting catalyst heater off due to outside setpoint range"));
   }
 }
 
@@ -410,7 +413,7 @@ static void statePreheatEnter()
   changeRelayState(HEATER_UPPER_REAR_DLB, relayStateOn);
   #endif
   #ifdef CONFIGURATION_LOW_COST
-  // Enable the Catalyst Heater Relay because we may need it. 
+  // Enable the Catalyst Heater Relay because we may need it.
   changeRelayState(CATALYST_HEATER_RELAY_PIN, relayStateOn);
   #endif
   
@@ -704,6 +707,9 @@ static void stateIdleUpdate()
   #ifdef CONFIGURATION_ORIGINAL
   upperRearHeater.relayState = relayStateOff;
   #endif       
+  #ifdef CONFIGURATION_LOW_COST
+  catalystHeater.relayState = relayStateOff;
+  #endif
   UpdateHeaterHardware();
 
   // Handle relay control
