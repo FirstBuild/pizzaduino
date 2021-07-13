@@ -28,10 +28,38 @@
 #include "coolingFan.h"
 #include "pinDefinitions.h"
 #include "relayDriver.h"
+#include "serialCommWrapper.h"
+
+static CoolingFanSpeed resolveCurrentCoolingFanSpeed(void)
+{
+  static CoolingFanSpeed currentSpeed = coolingFanInvalid;
+
+  if(getRelayState(COOLING_FAN_RELAY) == relayStateOff)
+  {
+    currentSpeed = coolingFanOff;
+    Serial.println(F("DEBUG Current Fan Speed is Off"));
+  }
+  else if(getRelayState(COOLING_FAN_RELAY) == relayStateOn)
+  {
+    if(getRelayState(COOLING_FAN_LOW_SPEED) == relayStateOff)
+    {
+      currentSpeed = coolingFanHigh;
+      Serial.println(F("DEBUG Current Fan Speed is High"));
+    }
+    else if(getRelayState(COOLING_FAN_LOW_SPEED) == relayStateOn)
+    {
+      currentSpeed = coolingFanLow;
+      Serial.println(F("DEBUG Current Fan Speed is Low"));
+    }
+  }
+
+  return currentSpeed;
+}
 
 void CoolingFanControl(CoolingFanSpeed speed)
 {
-  static CoolingFanSpeed lastSpeed = coolingFanInvalid;
+  Serial.println(F("DEBUG Fan speed update requested"));
+  static CoolingFanSpeed lastSpeed = resolveCurrentCoolingFanSpeed();
 
   if (lastSpeed != speed)
   {
@@ -40,14 +68,17 @@ void CoolingFanControl(CoolingFanSpeed speed)
       case coolingFanOff:
         changeRelayState(COOLING_FAN_RELAY, relayStateOff);
         changeRelayState(COOLING_FAN_LOW_SPEED, relayStateOff);
+        Serial.println(F("DEBUG Fan speed updated to Off"));
         break;
       case coolingFanLow:
         changeRelayState(COOLING_FAN_LOW_SPEED, relayStateOn);
         changeRelayState(COOLING_FAN_RELAY, relayStateOn);
+        Serial.println(F("DEBUG Fan speed updated to Low"));
         break;
       case coolingFanHigh:
         changeRelayState(COOLING_FAN_RELAY, relayStateOn);
         changeRelayState(COOLING_FAN_LOW_SPEED, relayStateOff);
+        Serial.println(F("DEBUG Fan speed updated to High"));
         break;
     }
   }

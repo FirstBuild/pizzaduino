@@ -204,4 +204,17 @@ void changeRelayState(uint8_t pin, RelayState desiredState)
   }
 }
 
+RelayState getRelayState(uint8_t pin)
+{
+  uint8_t index = getIndexOfRelay(pin);
+  RelayState currentState = relayStateOff;
+
+  if (digitalRead(relay[index].pin) == HIGH)
+  {
+    currentState = relayStateOn;
+  }
+
+  return currentState;
+}
+
 
